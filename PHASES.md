@@ -39,19 +39,24 @@
 
 ---
 
-## Phase 1: Core Rendering & Input ⏳
+## Phase 1: Core Rendering & Input ✅
 
-**Goal**: Basic grid rendering and player movement (no collision)
+**Goal**: Basic grid rendering and player movement (with boundary collision)
 
 ### Tasks
-- [ ] Create `ui/renderer.go` - grid-based rendering system
-- [ ] Create `ui/input.go` - keyboard event handling
-- [ ] Implement player glyph '@' on screen
-- [ ] Handle movement input (arrow keys + vi keys: hjkl)
-- [ ] Handle quit (q/ESC)
-- [ ] Write tests for input parsing
+- [x] Write tests for input handling - Direction, Action types (TDD - RED)
+- [x] Create `ui/input.go` - keyboard event handling (TDD - GREEN)
+- [x] Write tests for player position and movement (TDD - RED)
+- [x] Create `entity/player.go` - player struct (TDD - GREEN)
+- [x] Write tests for game state management (TDD - RED)
+- [x] Create `game/game.go` - game loop and state (TDD - GREEN)
+- [x] Handle movement input (arrow keys + vi keys: hjkl + WASD)
+- [x] Handle quit (q/ESC)
+- [x] Implement boundary collision (player can't leave screen)
+- [x] Update main.go with game loop
+- [x] Manual testing by user
 
-**Deliverable**: Player '@' moves freely on screen without boundaries.
+**Deliverable**: Player '@' moves on screen with boundary collision.
 
 **Commit Message**: `Phase 1: Core rendering and input system`
 
@@ -268,6 +273,7 @@
 - [ ] Create `ui/menu.go` - menu system
 - [ ] Main menu: New Game, Continue, Leaderboard, Quit
 - [ ] Pause menu (ESC during game)
+- [ ] Quit confirmation dialog (protect against accidental 'q' press)
 - [ ] Crafting menu improvements (show stats, materials)
 - [ ] Color scheme and visual polish (tcell colors)
 - [ ] Victory screen with score breakdown

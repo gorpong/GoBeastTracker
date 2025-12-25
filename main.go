@@ -6,6 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"beasttracker/internal/game"
 	"beasttracker/internal/ui"
 )
 
@@ -31,31 +32,42 @@ func main() {
 	}
 	defer screen.Fini()
 
-	// Set default style
-	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
-	titleStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow).Bold(true)
+	// Get screen dimensions and create game
+	width, height := screen.Size()
+	g := game.NewGame(width, height)
 
-	// Main loop
-	for {
+	// Define styles
+	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	playerStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow).Bold(true)
+	hudStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
+
+	// Main game loop
+	for g.Running {
 		screen.Clear()
 
-		width, height := screen.Size()
+		// Draw floor (dots for empty space)
+		w, h := screen.Size()
+		for y := 1; y < h-1; y++ {
+			for x := 0; x < w; x++ {
+				screen.SetCell(x, y, '.', defStyle)
+			}
+		}
 
-		// Draw title centered
-		title := "BeastTracker"
-		titleX := (width - len(title)) / 2
-		titleY := height / 3
-		screen.DrawString(titleX, titleY, title, titleStyle)
+		// Draw player
+		px, py := g.Player.Position()
+		screen.SetCell(px, py, g.Player.Glyph, playerStyle)
 
-		// Draw instructions
-		instructions := "Press 'q' or ESC to quit"
-		instrX := (width - len(instructions)) / 2
-		screen.DrawString(instrX, titleY+2, instructions, defStyle)
+		// Draw HUD at top
+		title := "BeastTracker - Phase 1"
+		screen.DrawString(0, 0, title, hudStyle)
 
-		// Draw version
-		version := "v0.1.0 - Phase 0"
-		verX := (width - len(version)) / 2
-		screen.DrawString(verX, titleY+4, version, defStyle)
+		// Draw position info
+		posInfo := fmt.Sprintf("Pos: (%d, %d)", px, py)
+		screen.DrawString(w-len(posInfo)-1, 0, posInfo, hudStyle)
+
+		// Draw instructions at bottom
+		instructions := "Move: arrows/hjkl/wasd | Quit: q/ESC"
+		screen.DrawString(0, h-1, instructions, defStyle)
 
 		screen.Show()
 
@@ -64,10 +76,14 @@ func main() {
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			screen.Sync()
+			// Update game dimensions on resize
+			newW, newH := screen.Size()
+			g.Width = newW
+			g.Height = newH
 		case *tcell.EventKey:
-			if ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' {
-				return
-			}
+			action := ui.ParseAction(ev.Key(), ev.Rune())
+			dir := ui.ParseDirection(ev.Key(), ev.Rune())
+			g.HandleInput(action, dir)
 		}
 	}
 }
