@@ -3,11 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
+	"beasttracker/internal/dungeon"
 	"beasttracker/internal/game"
 	"beasttracker/internal/ui"
+)
+
+const (
+	// Dungeon dimensions (larger than screen for scrolling)
+	dungeonWidth  = 100
+	dungeonHeight = 40
 )
 
 func main() {
@@ -32,12 +40,13 @@ func main() {
 	}
 	defer screen.Fini()
 
-	// Get screen dimensions and create game
-	width, height := screen.Size()
-	g := game.NewGame(width, height)
+	// Create game with current time as seed for variety
+	seed := time.Now().UnixNano()
+	g := game.NewGame(dungeonWidth, dungeonHeight, seed)
 
 	// Define styles
-	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	floorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
+	wallStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGray)
 	playerStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow).Bold(true)
 	hudStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
 
@@ -45,29 +54,69 @@ func main() {
 	for g.Running {
 		screen.Clear()
 
-		// Draw floor (dots for empty space)
-		w, h := screen.Size()
-		for y := 1; y < h-1; y++ {
-			for x := 0; x < w; x++ {
-				screen.SetCell(x, y, '.', defStyle)
+		screenW, screenH := screen.Size()
+		px, py := g.Player.Position()
+
+		// Calculate camera offset (center player on screen)
+		// Reserve 1 row for HUD at top, 1 row for instructions at bottom
+		viewHeight := screenH - 2
+		cameraX := px - screenW/2
+		cameraY := py - viewHeight/2
+
+		// Clamp camera to dungeon bounds
+		if cameraX < 0 {
+			cameraX = 0
+		}
+		if cameraY < 0 {
+			cameraY = 0
+		}
+		if cameraX > dungeonWidth-screenW {
+			cameraX = dungeonWidth - screenW
+		}
+		if cameraY > dungeonHeight-viewHeight {
+			cameraY = dungeonHeight - viewHeight
+		}
+
+		// Draw dungeon tiles (offset by 1 for HUD row)
+		for screenY := 0; screenY < viewHeight; screenY++ {
+			for screenX := 0; screenX < screenW; screenX++ {
+				worldX := screenX + cameraX
+				worldY := screenY + cameraY
+
+				tile := g.Dungeon.GetTile(worldX, worldY)
+				if tile != nil {
+					var style tcell.Style
+					switch tile.Type {
+					case dungeon.TileFloor:
+						style = floorStyle
+					case dungeon.TileWall:
+						style = wallStyle
+					default:
+						style = floorStyle
+					}
+					screen.SetCell(screenX, screenY+1, tile.Glyph(), style)
+				}
 			}
 		}
 
-		// Draw player
-		px, py := g.Player.Position()
-		screen.SetCell(px, py, g.Player.Glyph, playerStyle)
+		// Draw player (relative to camera, offset by 1 for HUD)
+		playerScreenX := px - cameraX
+		playerScreenY := py - cameraY + 1
+		if playerScreenX >= 0 && playerScreenX < screenW && playerScreenY >= 1 && playerScreenY < screenH-1 {
+			screen.SetCell(playerScreenX, playerScreenY, g.Player.Glyph, playerStyle)
+		}
 
 		// Draw HUD at top
-		title := "BeastTracker - Phase 1"
+		title := "BeastTracker - Phase 2"
 		screen.DrawString(0, 0, title, hudStyle)
 
 		// Draw position info
-		posInfo := fmt.Sprintf("Pos: (%d, %d)", px, py)
-		screen.DrawString(w-len(posInfo)-1, 0, posInfo, hudStyle)
+		posInfo := fmt.Sprintf("Pos: (%d, %d) Rooms: %d", px, py, len(g.Dungeon.Rooms))
+		screen.DrawString(screenW-len(posInfo)-1, 0, posInfo, hudStyle)
 
 		// Draw instructions at bottom
 		instructions := "Move: arrows/hjkl/wasd | Quit: q/ESC"
-		screen.DrawString(0, h-1, instructions, defStyle)
+		screen.DrawString(0, screenH-1, instructions, floorStyle)
 
 		screen.Show()
 
@@ -76,10 +125,6 @@ func main() {
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			screen.Sync()
-			// Update game dimensions on resize
-			newW, newH := screen.Size()
-			g.Width = newW
-			g.Height = newH
 		case *tcell.EventKey:
 			action := ui.ParseAction(ev.Key(), ev.Rune())
 			dir := ui.ParseDirection(ev.Key(), ev.Rune())

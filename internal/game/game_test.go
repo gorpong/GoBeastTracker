@@ -3,12 +3,13 @@ package game
 import (
 	"testing"
 
+	"beasttracker/internal/dungeon"
 	"beasttracker/internal/ui"
 )
 
 // TestNewGame verifies that a new game is created with correct initial state
 func TestNewGame(t *testing.T) {
-	g := NewGame(80, 25)
+	g := NewGame(80, 25, 12345)
 
 	if g == nil {
 		t.Fatal("NewGame() returned nil")
@@ -23,45 +24,44 @@ func TestNewGame(t *testing.T) {
 	if g.Player == nil {
 		t.Fatal("Game Player is nil")
 	}
+	if g.Dungeon == nil {
+		t.Fatal("Game Dungeon is nil")
+	}
 	if g.Running != true {
 		t.Error("Game should be running after creation")
 	}
 }
 
-// TestGamePlayerSpawn verifies player spawns within bounds
-func TestGamePlayerSpawn(t *testing.T) {
-	g := NewGame(80, 25)
+// TestNewGameWithDungeon verifies dungeon is properly generated
+func TestNewGameWithDungeon(t *testing.T) {
+	g := NewGame(100, 40, 12345)
 
-	x, y := g.Player.Position()
-
-	if x < 0 || x >= 80 {
-		t.Errorf("Player X = %d, should be in [0, 80)", x)
+	if g.Dungeon.Width != 100 {
+		t.Errorf("Dungeon Width = %d, want 100", g.Dungeon.Width)
 	}
-	if y < 0 || y >= 25 {
-		t.Errorf("Player Y = %d, should be in [0, 25)", y)
+	if g.Dungeon.Height != 40 {
+		t.Errorf("Dungeon Height = %d, want 40", g.Dungeon.Height)
+	}
+	if len(g.Dungeon.Rooms) == 0 {
+		t.Error("Dungeon should have rooms")
 	}
 }
 
-// TestGameHandleInput verifies input handling updates game state correctly
-func TestGameHandleInput(t *testing.T) {
-	g := NewGame(80, 25)
-	startX, startY := g.Player.Position()
+// TestGamePlayerSpawnInRoom verifies player spawns in a room (walkable tile)
+func TestGamePlayerSpawnInRoom(t *testing.T) {
+	g := NewGame(100, 40, 12345)
 
-	// Move right
-	g.HandleInput(ui.ActionMove, ui.DirRight)
 	x, y := g.Player.Position()
 
-	if x != startX+1 {
-		t.Errorf("After move right: X = %d, want %d", x, startX+1)
-	}
-	if y != startY {
-		t.Errorf("After move right: Y = %d, want %d (unchanged)", y, startY)
+	// Player should spawn on a walkable tile
+	if !g.Dungeon.IsWalkable(x, y) {
+		t.Errorf("Player spawned at (%d, %d) which is not walkable", x, y)
 	}
 }
 
 // TestGameHandleQuit verifies quit action stops the game
 func TestGameHandleQuit(t *testing.T) {
-	g := NewGame(80, 25)
+	g := NewGame(100, 40, 12345)
 
 	if !g.Running {
 		t.Error("Game should be running before quit")
@@ -74,70 +74,77 @@ func TestGameHandleQuit(t *testing.T) {
 	}
 }
 
-// TestGameBoundaryCheck verifies player cannot move outside bounds
-func TestGameBoundaryCheck(t *testing.T) {
-	g := NewGame(80, 25)
+// TestGameWallCollision verifies player cannot walk through walls
+func TestGameWallCollision(t *testing.T) {
+	g := NewGame(100, 40, 12345)
 
-	// Position player at top-left corner
-	g.Player.SetPosition(0, 0)
+	// Find the player's current position (should be in a room)
+	startX, startY := g.Player.Position()
 
-	// Try to move up (should be blocked)
-	g.HandleInput(ui.ActionMove, ui.DirUp)
-	x, y := g.Player.Position()
-	if y != 0 {
-		t.Errorf("Player moved up past boundary: Y = %d, want 0", y)
-	}
+	// Find a direction that leads to a wall
+	// We'll check all 4 directions and verify walls block movement
+	directions := []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight}
 
-	// Try to move left (should be blocked)
-	g.HandleInput(ui.ActionMove, ui.DirLeft)
-	x, y = g.Player.Position()
-	if x != 0 {
-		t.Errorf("Player moved left past boundary: X = %d, want 0", x)
-	}
+	for _, dir := range directions {
+		// Reset player to start position
+		g.Player.SetPosition(startX, startY)
 
-	// Position player at bottom-right corner
-	g.Player.SetPosition(79, 24)
+		dx, dy := dir.Delta()
+		targetX, targetY := startX+dx, startY+dy
 
-	// Try to move down (should be blocked)
-	g.HandleInput(ui.ActionMove, ui.DirDown)
-	x, y = g.Player.Position()
-	if y != 24 {
-		t.Errorf("Player moved down past boundary: Y = %d, want 24", y)
-	}
+		// Try to move
+		g.HandleInput(ui.ActionMove, dir)
+		newX, newY := g.Player.Position()
 
-	// Try to move right (should be blocked)
-	g.HandleInput(ui.ActionMove, ui.DirRight)
-	x, y = g.Player.Position()
-	if x != 79 {
-		t.Errorf("Player moved right past boundary: X = %d, want 79", x)
-	}
-}
-
-// TestGameValidMove verifies player can move within bounds
-func TestGameValidMove(t *testing.T) {
-	g := NewGame(80, 25)
-
-	// Position player in center
-	g.Player.SetPosition(40, 12)
-
-	// Move in all directions
-	directions := []struct {
-		dir    ui.Direction
-		wantX  int
-		wantY  int
-	}{
-		{ui.DirRight, 41, 12},
-		{ui.DirDown, 41, 13},
-		{ui.DirLeft, 40, 13},
-		{ui.DirUp, 40, 12},
-	}
-
-	for _, d := range directions {
-		g.HandleInput(ui.ActionMove, d.dir)
-		x, y := g.Player.Position()
-		if x != d.wantX || y != d.wantY {
-			t.Errorf("After move %v: got (%d, %d), want (%d, %d)",
-				d.dir, x, y, d.wantX, d.wantY)
+		if g.Dungeon.IsWalkable(targetX, targetY) {
+			// If target is walkable, player should have moved
+			if newX != targetX || newY != targetY {
+				t.Errorf("Player should have moved to walkable tile (%d,%d), but is at (%d,%d)",
+					targetX, targetY, newX, newY)
+			}
+		} else {
+			// If target is not walkable, player should stay in place
+			if newX != startX || newY != startY {
+				t.Errorf("Player should not move into wall at (%d,%d), but moved to (%d,%d)",
+					targetX, targetY, newX, newY)
+			}
 		}
 	}
 }
+
+// TestGameMovementInRoom verifies player can move freely within a room
+func TestGameMovementInRoom(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	// Player starts in first room's center
+	startX, startY := g.Player.Position()
+
+	// Find a direction where we can move (floor tile)
+	var canMoveDir ui.Direction
+	var targetX, targetY int
+
+	for _, dir := range []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight} {
+		dx, dy := dir.Delta()
+		tx, ty := startX+dx, startY+dy
+		if g.Dungeon.IsWalkable(tx, ty) {
+			canMoveDir = dir
+			targetX, targetY = tx, ty
+			break
+		}
+	}
+
+	if canMoveDir == ui.DirNone {
+		t.Skip("No walkable adjacent tile found")
+	}
+
+	g.HandleInput(ui.ActionMove, canMoveDir)
+	newX, newY := g.Player.Position()
+
+	if newX != targetX || newY != targetY {
+		t.Errorf("Player should have moved to (%d,%d), but is at (%d,%d)",
+			targetX, targetY, newX, newY)
+	}
+}
+
+// Ensure dungeon import is used
+var _ = dungeon.TileFloor
