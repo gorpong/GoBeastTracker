@@ -233,6 +233,17 @@ func (g *Game) UpdateMonsterAI() {
 
 // updateWanderAI makes a monster wander randomly
 func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	// Check if adjacent to player - if so, attack instead of moving
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.monsterAttack(monster)
+		return
+	}
+
 	// 50% chance to move on any given turn
 	if rng.Intn(2) == 0 {
 		return
@@ -242,9 +253,9 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	directions := []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight}
 	dir := directions[rng.Intn(len(directions))]
 
-	dx, dy := dir.Delta()
-	newX := monster.X + dx
-	newY := monster.Y + dy
+	ddx, ddy := dir.Delta()
+	newX := monster.X + ddx
+	newY := monster.Y + ddy
 
 	// Check if target position is valid
 	if !g.Dungeon.IsWalkable(newX, newY) {
@@ -252,7 +263,6 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	}
 
 	// Don't move into player
-	px, py := g.Player.Position()
 	if newX == px && newY == py {
 		return
 	}
