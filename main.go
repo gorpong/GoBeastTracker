@@ -53,17 +53,34 @@ func main() {
 	// Other styles
 	playerStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow).Bold(true)
 	hudStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
+	messageStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	bossStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPurple).Bold(true)
 
 	// Main game loop
 	for gameState.Running {
 		screen.Clear()
 
 		screenW, screenH := screen.Size()
+
+		// Check for game over or victory states
+		if gameState.GameState == game.StateGameOver {
+			drawGameOver(screen, screenW, screenH)
+			screen.Show()
+			waitForKeyPress(screen)
+			break
+		}
+		if gameState.GameState == game.StateVictory {
+			drawVictory(screen, screenW, screenH, gameState)
+			screen.Show()
+			waitForKeyPress(screen)
+			break
+		}
+
 		px, py := gameState.Player.Position()
 
 		// Calculate camera offset (center player on screen)
-		// Reserve 1 row for HUD at top, 1 row for instructions at bottom
-		viewHeight := screenH - 2
+		// Reserve 2 rows for HUD at top, 2 rows for messages/instructions at bottom
+		viewHeight := screenH - 4
 		cameraX := px - screenW/2
 		cameraY := py - viewHeight/2
 
@@ -81,7 +98,7 @@ func main() {
 			cameraY = dungeonHeight - viewHeight
 		}
 
-		// Draw dungeon tiles (offset by 1 for HUD row)
+		// Draw dungeon tiles (offset by 2 for HUD rows)
 		for screenY := 0; screenY < viewHeight; screenY++ {
 			for screenX := 0; screenX < screenW; screenX++ {
 				worldX := screenX + cameraX
@@ -117,12 +134,12 @@ func main() {
 							style = exploredFloorStyle
 						}
 					}
-					screen.SetCell(screenX, screenY+1, tile.Glyph(), style)
+					screen.SetCell(screenX, screenY+2, tile.Glyph(), style)
 				}
 			}
 		}
 
-		// Draw monsters (only if visible, relative to camera, offset by 1 for HUD)
+		// Draw monsters (only if visible, relative to camera, offset by 2 for HUD)
 		monsterStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
 		for _, monster := range gameState.Monsters {
 			if monster.Dead {
@@ -134,29 +151,58 @@ func main() {
 				continue
 			}
 			monsterScreenX := mx - cameraX
-			monsterScreenY := my - cameraY + 1
-			if monsterScreenX >= 0 && monsterScreenX < screenW && monsterScreenY >= 1 && monsterScreenY < screenH-1 {
-				screen.SetCell(monsterScreenX, monsterScreenY, monster.Glyph, monsterStyle)
+			monsterScreenY := my - cameraY + 2
+			if monsterScreenX >= 0 && monsterScreenX < screenW && monsterScreenY >= 2 && monsterScreenY < screenH-2 {
+				// Use special style for boss
+				style := monsterStyle
+				if monster.IsBoss {
+					style = bossStyle
+				}
+				screen.SetCell(monsterScreenX, monsterScreenY, monster.Glyph, style)
 			}
 		}
 
-		// Draw player (relative to camera, offset by 1 for HUD)
+		// Draw player (relative to camera, offset by 2 for HUD)
 		playerScreenX := px - cameraX
-		playerScreenY := py - cameraY + 1
-		if playerScreenX >= 0 && playerScreenX < screenW && playerScreenY >= 1 && playerScreenY < screenH-1 {
+		playerScreenY := py - cameraY + 2
+		if playerScreenX >= 0 && playerScreenX < screenW && playerScreenY >= 2 && playerScreenY < screenH-2 {
 			screen.SetCell(playerScreenX, playerScreenY, gameState.Player.Glyph, playerStyle)
 		}
 
-		// Draw HUD at top
-		title := "BeastTracker - Phase 5"
+		// Draw HUD at top (2 rows)
+		// Row 0: Title and HP
+		title := "BeastTracker"
 		screen.DrawString(0, 0, title, hudStyle)
 
-		// Draw position info
-		posInfo := fmt.Sprintf("Pos: (%d, %d) Monsters: %d", px, py, len(gameState.Monsters))
-		screen.DrawString(screenW-len(posInfo)-1, 0, posInfo, hudStyle)
+		hpInfo := fmt.Sprintf("HP: %d/%d", gameState.Player.HP, gameState.Player.MaxHP)
+		screen.DrawString(len(title)+2, 0, hpInfo, getHPStyle(gameState.Player.HP, gameState.Player.MaxHP))
+
+		// Show boss info if exists
+		boss := gameState.GetBoss()
+		if boss != nil && !boss.Dead {
+			bossInfo := fmt.Sprintf("Target: %s HP:%d/%d", boss.Name, boss.HP, boss.MaxHP)
+			screen.DrawString(screenW-len(bossInfo)-1, 0, bossInfo, bossStyle)
+		}
+
+		// Row 1: ATK/DEF and position
+		statsInfo := fmt.Sprintf("ATK:%d DEF:%d", gameState.Player.Attack, gameState.Player.Defense)
+		screen.DrawString(0, 1, statsInfo, hudStyle)
+
+		posInfo := fmt.Sprintf("Pos:(%d,%d)", px, py)
+		screen.DrawString(screenW-len(posInfo)-1, 1, posInfo, hudStyle)
+
+		// Draw messages above instructions (second to last row)
+		messageRow := screenH - 2
+		if len(gameState.Messages) > 0 {
+			lastMessage := gameState.Messages[len(gameState.Messages)-1]
+			if len(lastMessage) > screenW {
+				lastMessage = lastMessage[:screenW]
+			}
+			screen.DrawString(0, messageRow, lastMessage, messageStyle)
+		}
 
 		// Draw instructions at bottom
-		instructions := "Move: arrows/hjkl/wasd | Quit: q/ESC"
+		instructions := "Move/Attack: arrows/hjkl/wasd | Quit: q/ESC"
 		screen.DrawString(0, screenH-1, instructions, floorStyle)
 
 		screen.Show()
@@ -170,6 +216,94 @@ func main() {
 			action := ui.ParseAction(ev.Key(), ev.Rune())
 			dir := ui.ParseDirection(ev.Key(), ev.Rune())
 			gameState.HandleInput(action, dir)
+		}
+	}
+}
+
+// getHPStyle returns a style based on current HP percentage
+func getHPStyle(current, max int) tcell.Style {
+	percent := float64(current) / float64(max)
+	if percent > 0.6 {
+		return tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
+	} else if percent > 0.3 {
+		return tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow)
+	}
+	return tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
+}
+
+// drawGameOver draws the game over screen
+func drawGameOver(screen *ui.Screen, width, height int) {
+	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed).Bold(true)
+	titleStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+
+	lines := []string{
+		"",
+		"  ####    ###   ##   ## #####      ###  ##   ## ##### ##### ",
+		" ##      ## ##  ### ### ##        ## ## ##   ## ##    ##  ##",
+		" ## ### ##   ## ## # ## ####      ## ## ##   ## ####  ##### ",
+		" ##  ## ####### ##   ## ##        ## ##  ## ##  ##    ##  ##",
+		"  ####  ##   ## ##   ## #####      ###    ###   ##### ##  ##",
+		"",
+		"You have been slain!",
+		"",
+		"Press any key to exit...",
+	}
+
+	startY := height/2 - len(lines)/2
+	for i, line := range lines {
+		x := (width - len(line)) / 2
+		if x < 0 {
+			x = 0
+		}
+		if i < 6 {
+			screen.DrawString(x, startY+i, line, style)
+		} else {
+			screen.DrawString(x, startY+i, line, titleStyle)
+		}
+	}
+}
+
+// drawVictory draws the victory screen
+func drawVictory(screen *ui.Screen, width, height int, gameState *game.Game) {
+	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen).Bold(true)
+	titleStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow)
+
+	lines := []string{
+		"",
+		" ##   ## ####  #### #####  ###  #####  ##   ## ",
+		" ##   ##  ##  ##      ##  ## ## ##  ##  ## ##  ",
+		"  ## ##   ##  ##      ##  ## ## #####    ###   ",
+		"   ###    ##  ##      ##  ## ## ##  ##   ##    ",
+		"    #    ####  ####   ##   ###  ##  ##   ##    ",
+		"",
+		"You have slain the beast!",
+		"",
+		fmt.Sprintf("Final HP: %d/%d", gameState.Player.HP, gameState.Player.MaxHP),
+		"",
+		"Press any key to exit...",
+	}
+
+	startY := height/2 - len(lines)/2
+	for i, line := range lines {
+		x := (width - len(line)) / 2
+		if x < 0 {
+			x = 0
+		}
+		if i < 6 {
+			screen.DrawString(x, startY+i, line, style)
+		} else {
+			screen.DrawString(x, startY+i, line, titleStyle)
+		}
+	}
+}
+
+// waitForKeyPress waits for any key press
+func waitForKeyPress(screen *ui.Screen) {
+	for {
+		ev := screen.PollEvent()
+		switch ev.(type) {
+		case *tcell.EventKey:
+			return
 		}
 	}
 }

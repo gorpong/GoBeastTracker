@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -13,18 +14,30 @@ import (
 const (
 	monstersPerRoom = 2  // Average monsters per room
 	playerFOVRadius = 8  // Player's field of view radius
+	maxMessages     = 5  // Maximum number of messages to display
+)
+
+// GameStateType represents the current state of the game
+type GameStateType int
+
+const (
+	StatePlaying GameStateType = iota
+	StateGameOver
+	StateVictory
 )
 
 // Game holds all game state
 type Game struct {
-	Width    int
-	Height   int
-	Player   *entity.Player
-	Dungeon  *dungeon.Dungeon
-	Monsters []*entity.Monster
-	FOV      *fov.FOVMap
-	Running  bool
-	Seed     int64
+	Width     int
+	Height    int
+	Player    *entity.Player
+	Dungeon   *dungeon.Dungeon
+	Monsters  []*entity.Monster
+	FOV       *fov.FOVMap
+	Running   bool
+	Seed      int64
+	GameState GameStateType
+	Messages  []string
 }
 
 // NewGame creates a new game with the specified dimensions and RNG seed
@@ -45,18 +58,23 @@ func NewGame(width, height int, seed int64) *Game {
 	}
 
 	newGame := &Game{
-		Width:    width,
-		Height:   height,
-		Player:   entity.NewPlayer(playerX, playerY),
-		Dungeon:  generatedDungeon,
-		Monsters: make([]*entity.Monster, 0),
-		FOV:      fov.NewFOVMap(width, height),
-		Running:  true,
-		Seed:     seed,
+		Width:     width,
+		Height:    height,
+		Player:    entity.NewPlayer(playerX, playerY),
+		Dungeon:   generatedDungeon,
+		Monsters:  make([]*entity.Monster, 0),
+		FOV:       fov.NewFOVMap(width, height),
+		Running:   true,
+		Seed:      seed,
+		GameState: StatePlaying,
+		Messages:  make([]string, 0),
 	}
 
 	// Spawn monsters in rooms (skip first room where player spawns)
 	newGame.spawnMonsters(rng)
+
+	// Spawn boss in the last room
+	newGame.spawnBoss(rng)
 
 	// Compute initial FOV
 	newGame.ComputeFOV()
@@ -146,6 +164,46 @@ func (g *Game) GetMonsterAt(x, y int) *entity.Monster {
 	return nil
 }
 
+// GetBoss returns the boss monster, or nil if none exists
+func (g *Game) GetBoss() *entity.Monster {
+	for _, monster := range g.Monsters {
+		if monster.IsBoss {
+			return monster
+		}
+	}
+	return nil
+}
+
+// spawnBoss spawns a boss monster in the last (furthest) room
+func (g *Game) spawnBoss(rng *rand.Rand) {
+	if len(g.Dungeon.Rooms) < 2 {
+		return // Need at least 2 rooms
+	}
+
+	// Define boss types
+	bossTypes := []struct {
+		name   string
+		glyph  rune
+		hp     int
+		attack int
+	}{
+		{"Wyvern", 'W', 80, 12},
+		{"Ogre", 'O', 100, 10},
+		{"Troll", 'T', 90, 11},
+		{"Cyclops", 'C', 85, 13},
+		{"Minotaur", 'M', 95, 12},
+	}
+
+	// Spawn in the last room (furthest from player)
+	lastRoom := g.Dungeon.Rooms[len(g.Dungeon.Rooms)-1]
+	cx, cy := lastRoom.Center()
+
+	// Pick a random boss type
+	bossType := bossTypes[rng.Intn(len(bossTypes))]
+	boss := entity.NewBossMonster(bossType.name, bossType.glyph, cx, cy, bossType.hp, bossType.attack)
+	g.Monsters = append(g.Monsters, boss)
+}
+
 // RemoveDeadMonsters removes all dead monsters from the game
 func (g *Game) RemoveDeadMonsters() {
 	alive := make([]*entity.Monster, 0, len(g.Monsters))
@@ -220,7 +278,7 @@ func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
 }
 
 // tryMovePlayer attempts to move the player in the given direction.
-// Movement is blocked if it would hit a wall, monster, or go out of bounds.
+// Movement is blocked if it would hit a wall. If a monster is present, attack it.
 func (g *Game) tryMovePlayer(dir ui.Direction) {
 	dx, dy := dir.Delta()
 	newX := g.Player.X + dx
@@ -231,8 +289,9 @@ func (g *Game) tryMovePlayer(dir ui.Direction) {
 		return
 	}
 
-	// Check for monster at target position
-	if g.GetMonsterAt(newX, newY) != nil {
+	// Check for monster at target position - bump to attack!
+	if monster := g.GetMonsterAt(newX, newY); monster != nil {
+		g.playerAttack(monster)
 		return
 	}
 
@@ -240,4 +299,60 @@ func (g *Game) tryMovePlayer(dir ui.Direction) {
 
 	// Recompute FOV after moving
 	g.ComputeFOV()
+}
+
+// AddMessage adds a message to the message log
+func (g *Game) AddMessage(msg string) {
+	g.Messages = append(g.Messages, msg)
+	// Keep only the last maxMessages
+	if len(g.Messages) > maxMessages {
+		g.Messages = g.Messages[len(g.Messages)-maxMessages:]
+	}
+}
+
+// CalculateDamage calculates damage dealt based on attack and defense
+func (g *Game) CalculateDamage(attack, defense int) int {
+	damage := attack - defense
+	if damage < 1 {
+		damage = 1 // Minimum 1 damage
+	}
+	return damage
+}
+
+// playerAttack handles the player attacking a monster
+func (g *Game) playerAttack(monster *entity.Monster) {
+	damage := g.CalculateDamage(g.Player.Attack, 0) // Monsters have no defense for now
+	monster.TakeDamage(damage)
+
+	if monster.Dead {
+		if monster.IsBoss {
+			g.AddMessage(fmt.Sprintf("You have slain the %s! VICTORY!", monster.Name))
+			g.GameState = StateVictory
+		} else {
+			g.AddMessage(fmt.Sprintf("You killed the %s!", monster.Name))
+		}
+		g.RemoveDeadMonsters()
+	} else {
+		g.AddMessage(fmt.Sprintf("You hit the %s for %d damage.", monster.Name, damage))
+	}
+}
+
+// monsterAttack handles a monster attacking the player
+func (g *Game) monsterAttack(monster *entity.Monster) {
+	damage := g.CalculateDamage(monster.Attack, g.Player.Defense)
+	g.Player.TakeDamage(damage)
+
+	g.AddMessage(fmt.Sprintf("The %s hits you for %d damage!", monster.Name, damage))
+
+	if g.Player.Dead {
+		g.GameState = StateGameOver
+		g.AddMessage("You have been slain!")
+	}
+}
+
+// CheckPlayerDeath checks if the player is dead and updates game state
+func (g *Game) CheckPlayerDeath() {
+	if g.Player.Dead && g.GameState != StateGameOver {
+		g.GameState = StateGameOver
+	}
 }

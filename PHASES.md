@@ -117,7 +117,7 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 5: Field of View 🚧
+## Phase 5: Field of View ✅
 
 **Goal**: Implement fog of war
 
@@ -128,7 +128,7 @@ All tasks completed in Phase 2.
 - [x] Render visible tiles normally
 - [x] Render "memory" tiles dimly (previously seen)
 - [x] Hide monsters outside FOV
-- [ ] Manual testing by user
+- [x] Manual testing by user
 
 **Deliverable**: Fog of war with exploration memory.
 
@@ -136,19 +136,22 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 6: Combat System ⏳
+## Phase 6: Combat System ✅
 
 **Goal**: Bump-to-attack combat
 
 ### Tasks
-- [ ] Create `combat/combat.go` - damage calculation
-- [ ] Create `entity/player.go` - player stats (HP, ATK, DEF)
-- [ ] Implement bump-to-attack mechanic
-- [ ] HP tracking and death handling
-- [ ] Monster removal on death
-- [ ] Player death → game over screen
-- [ ] Combat message log
-- [ ] Write tests for damage calculations
+- [x] Write tests for player stats (TDD - RED)
+- [x] Add player stats (HP, ATK, DEF) to entity/player.go (TDD - GREEN)
+- [x] Write tests for combat mechanics (TDD - RED)
+- [x] Implement bump-to-attack mechanic (TDD - GREEN)
+- [x] Implement damage calculation (attack - defense, min 1)
+- [x] HP tracking and death handling
+- [x] Monster removal on death
+- [x] Player death triggers game over state
+- [x] Combat message log
+- [x] HP display with color coding (green/yellow/red)
+- [x] Manual testing by user
 
 **Deliverable**: Functional combat with death consequences.
 
@@ -156,17 +159,23 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 7: Target Monster & Win Condition ⏳
+## Phase 7: Target Monster & Win Condition ✅
 
 **Goal**: Boss monster and hunt victory
 
 ### Tasks
-- [ ] Define 3-5 boss monster types (unique stats, glyphs)
-- [ ] Spawn one boss per dungeon (target monster)
-- [ ] Boss has 3-5x HP of regular monsters
-- [ ] Win condition: defeat target monster
-- [ ] Victory screen with hunt completion
-- [ ] Write tests for boss spawning
+- [x] Write tests for boss monsters (TDD - RED)
+- [x] Define 5 boss monster types (Wyvern, Ogre, Troll, Cyclops, Minotaur)
+- [x] Add IsBoss field to Monster struct (TDD - GREEN)
+- [x] Write tests for boss spawning and victory (TDD - RED)
+- [x] Spawn one boss per dungeon in last room (TDD - GREEN)
+- [x] Boss has 5-7x HP of regular monsters
+- [x] Win condition: defeat target monster
+- [x] Victory screen with hunt completion
+- [x] Game over screen on player death
+- [x] Boss displayed in purple, regular monsters in red
+- [x] HUD shows boss target info
+- [x] Manual testing by user
 
 **Deliverable**: Complete hunt with clear objective and victory.
 

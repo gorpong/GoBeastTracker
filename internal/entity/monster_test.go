@@ -158,3 +158,34 @@ func TestAITypeString(t *testing.T) {
 		})
 	}
 }
+
+// TestNewBossMonster verifies boss monster creation
+func TestNewBossMonster(t *testing.T) {
+	boss := NewBossMonster("Wyvern", 'W', 10, 10, 100, 15)
+
+	if boss.Name != "Wyvern" {
+		t.Errorf("Boss Name = %q, want 'Wyvern'", boss.Name)
+	}
+	if !boss.IsBoss {
+		t.Error("Boss IsBoss should be true")
+	}
+	if boss.HP != 100 {
+		t.Errorf("Boss HP = %d, want 100", boss.HP)
+	}
+}
+
+// TestBossMonsterHigherStats verifies boss has higher stats than regular
+func TestBossMonsterHigherStats(t *testing.T) {
+	regular := NewMonster("Goblin", 'g', 0, 0, 15, 3)
+	boss := NewBossMonster("Wyvern", 'W', 0, 0, 100, 15)
+
+	// Boss should have significantly more HP
+	if boss.HP <= regular.HP*2 {
+		t.Errorf("Boss HP (%d) should be much higher than regular (%d)", boss.HP, regular.HP)
+	}
+
+	// Boss attack should be higher
+	if boss.Attack <= regular.Attack {
+		t.Errorf("Boss Attack (%d) should be higher than regular (%d)", boss.Attack, regular.Attack)
+	}
+}

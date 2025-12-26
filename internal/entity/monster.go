@@ -35,6 +35,7 @@ type Monster struct {
 	Attack int
 	AI     AIType
 	Dead   bool
+	IsBoss bool
 }
 
 // NewMonster creates a new monster with the specified attributes
@@ -49,6 +50,23 @@ func NewMonster(name string, glyph rune, x, y, hp, attack int) *Monster {
 		Attack: attack,
 		AI:     AIWander,
 		Dead:   false,
+		IsBoss: false,
+	}
+}
+
+// NewBossMonster creates a boss monster (target monster for the hunt)
+func NewBossMonster(name string, glyph rune, x, y, hp, attack int) *Monster {
+	return &Monster{
+		Name:   name,
+		Glyph:  glyph,
+		X:      x,
+		Y:      y,
+		HP:     hp,
+		MaxHP:  hp,
+		Attack: attack,
+		AI:     AIWander, // Can be upgraded to AIChase in Phase 10
+		Dead:   false,
+		IsBoss: true,
 	}
 }
 

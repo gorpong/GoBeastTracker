@@ -4,19 +4,36 @@ import (
 	"beasttracker/internal/ui"
 )
 
+// Default player stats
+const (
+	DefaultPlayerHP      = 100
+	DefaultPlayerAttack  = 10
+	DefaultPlayerDefense = 2
+)
+
 // Player represents the player character in the game
 type Player struct {
-	X     int
-	Y     int
-	Glyph rune
+	X       int
+	Y       int
+	Glyph   rune
+	HP      int
+	MaxHP   int
+	Attack  int
+	Defense int
+	Dead    bool
 }
 
 // NewPlayer creates a new player at the specified position
 func NewPlayer(x, y int) *Player {
 	return &Player{
-		X:     x,
-		Y:     y,
-		Glyph: '@',
+		X:       x,
+		Y:       y,
+		Glyph:   '@',
+		HP:      DefaultPlayerHP,
+		MaxHP:   DefaultPlayerHP,
+		Attack:  DefaultPlayerAttack,
+		Defense: DefaultPlayerDefense,
+		Dead:    false,
 	}
 }
 
@@ -36,4 +53,18 @@ func (p *Player) Position() (int, int) {
 func (p *Player) SetPosition(x, y int) {
 	p.X = x
 	p.Y = y
+}
+
+// TakeDamage reduces the player's HP by the specified amount
+func (p *Player) TakeDamage(damage int) {
+	p.HP -= damage
+	if p.HP <= 0 {
+		p.HP = 0
+		p.Dead = true
+	}
+}
+
+// IsAlive returns true if the player is still alive
+func (p *Player) IsAlive() bool {
+	return !p.Dead
 }
