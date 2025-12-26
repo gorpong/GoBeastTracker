@@ -94,19 +94,24 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 4: Monsters & Basic AI ⏳
+## Phase 4: Monsters & Basic AI 🚧
 
 **Goal**: Populate dungeon with monsters
 
 ### Tasks
-- [ ] Create `entity/monster.go` - monster struct
-- [ ] Define 3-4 regular monster types (stats, glyphs)
-- [ ] Implement spawn system (place monsters in rooms)
-- [ ] Basic AI: wander randomly
-- [ ] Monsters block player movement
-- [ ] Write tests for AI behavior
+- [x] Write tests for Monster structure (TDD - RED)
+- [x] Create `entity/monster.go` - monster struct with HP, attack, AI type (TDD - GREEN)
+- [x] Define 4 regular monster types (Goblin, Rat, Spider, Bat)
+- [x] Write tests for monster spawning in game (TDD - RED)
+- [x] Implement spawn system - 1-3 monsters per room (TDD - GREEN)
+- [x] Monsters block player movement
+- [x] Monsters render in red on screen
+- [x] Write tests for wander AI behavior (TDD - RED)
+- [x] Implement wander AI - random movement (TDD - GREEN)
+- [x] Integrate AI updates into game loop (monsters move after player)
+- [ ] Manual testing by user
 
-**Deliverable**: Dungeon has wandering monsters that block movement.
+**Deliverable**: Dungeon populated with wandering monsters that block movement.
 
 **Commit Message**: `Phase 4: Monster spawning and basic AI`
 

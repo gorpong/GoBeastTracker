@@ -42,7 +42,7 @@ func main() {
 
 	// Create game with current time as seed for variety
 	seed := time.Now().UnixNano()
-	g := game.NewGame(dungeonWidth, dungeonHeight, seed)
+	gameState := game.NewGame(dungeonWidth, dungeonHeight, seed)
 
 	// Define styles
 	floorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
@@ -51,11 +51,11 @@ func main() {
 	hudStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
 
 	// Main game loop
-	for g.Running {
+	for gameState.Running {
 		screen.Clear()
 
 		screenW, screenH := screen.Size()
-		px, py := g.Player.Position()
+		px, py := gameState.Player.Position()
 
 		// Calculate camera offset (center player on screen)
 		// Reserve 1 row for HUD at top, 1 row for instructions at bottom
@@ -83,7 +83,7 @@ func main() {
 				worldX := screenX + cameraX
 				worldY := screenY + cameraY
 
-				tile := g.Dungeon.GetTile(worldX, worldY)
+				tile := gameState.Dungeon.GetTile(worldX, worldY)
 				if tile != nil {
 					var style tcell.Style
 					switch tile.Type {
@@ -99,19 +99,33 @@ func main() {
 			}
 		}
 
+		// Draw monsters (relative to camera, offset by 1 for HUD)
+		monsterStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
+		for _, monster := range gameState.Monsters {
+			if monster.Dead {
+				continue
+			}
+			mx, my := monster.Position()
+			monsterScreenX := mx - cameraX
+			monsterScreenY := my - cameraY + 1
+			if monsterScreenX >= 0 && monsterScreenX < screenW && monsterScreenY >= 1 && monsterScreenY < screenH-1 {
+				screen.SetCell(monsterScreenX, monsterScreenY, monster.Glyph, monsterStyle)
+			}
+		}
+
 		// Draw player (relative to camera, offset by 1 for HUD)
 		playerScreenX := px - cameraX
 		playerScreenY := py - cameraY + 1
 		if playerScreenX >= 0 && playerScreenX < screenW && playerScreenY >= 1 && playerScreenY < screenH-1 {
-			screen.SetCell(playerScreenX, playerScreenY, g.Player.Glyph, playerStyle)
+			screen.SetCell(playerScreenX, playerScreenY, gameState.Player.Glyph, playerStyle)
 		}
 
 		// Draw HUD at top
-		title := "BeastTracker - Phase 2"
+		title := "BeastTracker - Phase 4"
 		screen.DrawString(0, 0, title, hudStyle)
 
 		// Draw position info
-		posInfo := fmt.Sprintf("Pos: (%d, %d) Rooms: %d", px, py, len(g.Dungeon.Rooms))
+		posInfo := fmt.Sprintf("Pos: (%d, %d) Monsters: %d", px, py, len(gameState.Monsters))
 		screen.DrawString(screenW-len(posInfo)-1, 0, posInfo, hudStyle)
 
 		// Draw instructions at bottom
@@ -128,7 +142,7 @@ func main() {
 		case *tcell.EventKey:
 			action := ui.ParseAction(ev.Key(), ev.Rune())
 			dir := ui.ParseDirection(ev.Key(), ev.Rune())
-			g.HandleInput(action, dir)
+			gameState.HandleInput(action, dir)
 		}
 	}
 }

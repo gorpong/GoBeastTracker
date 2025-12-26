@@ -1,9 +1,11 @@
 package game
 
 import (
+	"fmt"
 	"testing"
 
 	"beasttracker/internal/dungeon"
+	"beasttracker/internal/entity"
 	"beasttracker/internal/ui"
 )
 
@@ -76,10 +78,10 @@ func TestGameHandleQuit(t *testing.T) {
 
 // TestGameWallCollision verifies player cannot walk through walls
 func TestGameWallCollision(t *testing.T) {
-	g := NewGame(100, 40, 12345)
+	testGame := NewGame(100, 40, 12345)
 
 	// Find the player's current position (should be in a room)
-	startX, startY := g.Player.Position()
+	startX, startY := testGame.Player.Position()
 
 	// Find a direction that leads to a wall
 	// We'll check all 4 directions and verify walls block movement
@@ -87,16 +89,16 @@ func TestGameWallCollision(t *testing.T) {
 
 	for _, dir := range directions {
 		// Reset player to start position
-		g.Player.SetPosition(startX, startY)
+		testGame.Player.SetPosition(startX, startY)
 
 		dx, dy := dir.Delta()
 		targetX, targetY := startX+dx, startY+dy
 
 		// Try to move
-		g.HandleInput(ui.ActionMove, dir)
-		newX, newY := g.Player.Position()
+		testGame.HandleInput(ui.ActionMove, dir)
+		newX, newY := testGame.Player.Position()
 
-		if g.Dungeon.IsWalkable(targetX, targetY) {
+		if testGame.Dungeon.IsWalkable(targetX, targetY) {
 			// If target is walkable, player should have moved
 			if newX != targetX || newY != targetY {
 				t.Errorf("Player should have moved to walkable tile (%d,%d), but is at (%d,%d)",
@@ -114,10 +116,10 @@ func TestGameWallCollision(t *testing.T) {
 
 // TestGameMovementInRoom verifies player can move freely within a room
 func TestGameMovementInRoom(t *testing.T) {
-	g := NewGame(100, 40, 12345)
+	testGame := NewGame(100, 40, 12345)
 
 	// Player starts in first room's center
-	startX, startY := g.Player.Position()
+	startX, startY := testGame.Player.Position()
 
 	// Find a direction where we can move (floor tile)
 	var canMoveDir ui.Direction
@@ -126,7 +128,7 @@ func TestGameMovementInRoom(t *testing.T) {
 	for _, dir := range []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight} {
 		dx, dy := dir.Delta()
 		tx, ty := startX+dx, startY+dy
-		if g.Dungeon.IsWalkable(tx, ty) {
+		if testGame.Dungeon.IsWalkable(tx, ty) {
 			canMoveDir = dir
 			targetX, targetY = tx, ty
 			break
@@ -137,12 +139,184 @@ func TestGameMovementInRoom(t *testing.T) {
 		t.Skip("No walkable adjacent tile found")
 	}
 
-	g.HandleInput(ui.ActionMove, canMoveDir)
-	newX, newY := g.Player.Position()
+	testGame.HandleInput(ui.ActionMove, canMoveDir)
+	newX, newY := testGame.Player.Position()
 
 	if newX != targetX || newY != targetY {
 		t.Errorf("Player should have moved to (%d,%d), but is at (%d,%d)",
 			targetX, targetY, newX, newY)
+	}
+}
+
+// TestGameHasMonsters verifies monsters are spawned in the game
+func TestGameHasMonsters(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	if len(g.Monsters) == 0 {
+		t.Error("Game should have monsters spawned")
+	}
+
+	// Should have multiple monsters
+	if len(g.Monsters) < 3 {
+		t.Errorf("Expected at least 3 monsters, got %d", len(g.Monsters))
+	}
+}
+
+// TestGameMonstersInRooms verifies monsters spawn on walkable tiles
+func TestGameMonstersInRooms(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	for i, monster := range g.Monsters {
+		x, y := monster.Position()
+		if !g.Dungeon.IsWalkable(x, y) {
+			t.Errorf("Monster %d at (%d, %d) is not on a walkable tile", i, x, y)
+		}
+	}
+}
+
+// TestGameMonstersDontOverlapPlayer verifies monsters don't spawn on player
+func TestGameMonstersDontOverlapPlayer(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	px, py := g.Player.Position()
+	for _, monster := range g.Monsters {
+		mx, my := monster.Position()
+		if mx == px && my == py {
+			t.Errorf("Monster spawned on player position (%d, %d)", px, py)
+		}
+	}
+}
+
+// TestGameGetMonsterAt verifies GetMonsterAt returns correct monster
+func TestGameGetMonsterAt(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	if len(g.Monsters) == 0 {
+		t.Skip("No monsters to test")
+	}
+
+	// Get first monster's position
+	mx, my := g.Monsters[0].Position()
+
+	found := g.GetMonsterAt(mx, my)
+	if found == nil {
+		t.Errorf("GetMonsterAt(%d, %d) returned nil, expected monster", mx, my)
+	}
+	if found != g.Monsters[0] {
+		t.Error("GetMonsterAt returned wrong monster")
+	}
+
+	// Check empty position
+	emptyMonster := g.GetMonsterAt(-999, -999)
+	if emptyMonster != nil {
+		t.Error("GetMonsterAt should return nil for empty position")
+	}
+}
+
+// TestGameRemoveDeadMonsters verifies dead monsters are removed
+func TestGameRemoveDeadMonsters(t *testing.T) {
+	g := NewGame(100, 40, 12345)
+
+	initialCount := len(g.Monsters)
+	if initialCount == 0 {
+		t.Skip("No monsters to test")
+	}
+
+	// Kill first monster
+	g.Monsters[0].TakeDamage(g.Monsters[0].HP)
+	if !g.Monsters[0].Dead {
+		t.Fatal("Monster should be dead")
+	}
+
+	// Remove dead monsters
+	g.RemoveDeadMonsters()
+
+	if len(g.Monsters) != initialCount-1 {
+		t.Errorf("After removing dead: %d monsters, want %d", len(g.Monsters), initialCount-1)
+	}
+}
+
+// TestGameUpdateMonsterAI verifies monsters move with wander AI
+func TestGameUpdateMonsterAI(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if len(testGame.Monsters) == 0 {
+		t.Skip("No monsters to test")
+	}
+
+	// Get initial positions
+	initialPositions := make(map[*entity.Monster]struct{ x, y int })
+	for _, monster := range testGame.Monsters {
+		x, y := monster.Position()
+		initialPositions[monster] = struct{ x, y int }{x, y}
+	}
+
+	// Update AI multiple times - some monsters should move
+	moved := false
+	for i := 0; i < 10; i++ {
+		testGame.UpdateMonsterAI()
+		for _, monster := range testGame.Monsters {
+			x, y := monster.Position()
+			initial := initialPositions[monster]
+			if x != initial.x || y != initial.y {
+				moved = true
+				break
+			}
+		}
+		if moved {
+			break
+		}
+	}
+
+	if !moved {
+		t.Error("After 10 AI updates, at least one monster should have moved")
+	}
+}
+
+// TestGameMonstersDontMoveIntoWalls verifies AI respects walls
+func TestGameMonstersDontMoveIntoWalls(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if len(testGame.Monsters) == 0 {
+		t.Skip("No monsters to test")
+	}
+
+	// Update AI many times
+	for i := 0; i < 50; i++ {
+		testGame.UpdateMonsterAI()
+
+		// Check all monsters are on walkable tiles
+		for _, monster := range testGame.Monsters {
+			x, y := monster.Position()
+			if !testGame.Dungeon.IsWalkable(x, y) {
+				t.Errorf("Monster at (%d, %d) is on unwalkable tile after AI update", x, y)
+			}
+		}
+	}
+}
+
+// TestGameMonstersDontOverlap verifies AI prevents monster stacking
+func TestGameMonstersDontOverlap(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if len(testGame.Monsters) < 2 {
+		t.Skip("Need at least 2 monsters to test")
+	}
+
+	// Update AI many times
+	for i := 0; i < 50; i++ {
+		testGame.UpdateMonsterAI()
+
+		// Check no two monsters share position
+		positions := make(map[string]bool)
+		for _, monster := range testGame.Monsters {
+			x, y := monster.Position()
+			key := fmt.Sprintf("%d,%d", x, y)
+			if positions[key] {
+				t.Errorf("Multiple monsters at position %s after AI update", key)
+			}
+			positions[key] = true
+		}
 	}
 }
 
