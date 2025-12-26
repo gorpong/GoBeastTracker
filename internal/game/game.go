@@ -6,11 +6,13 @@ import (
 
 	"beasttracker/internal/dungeon"
 	"beasttracker/internal/entity"
+	"beasttracker/internal/fov"
 	"beasttracker/internal/ui"
 )
 
 const (
-	monstersPerRoom = 2 // Average monsters per room
+	monstersPerRoom = 2  // Average monsters per room
+	playerFOVRadius = 8  // Player's field of view radius
 )
 
 // Game holds all game state
@@ -20,6 +22,7 @@ type Game struct {
 	Player   *entity.Player
 	Dungeon  *dungeon.Dungeon
 	Monsters []*entity.Monster
+	FOV      *fov.FOVMap
 	Running  bool
 	Seed     int64
 }
@@ -47,6 +50,7 @@ func NewGame(width, height int, seed int64) *Game {
 		Player:   entity.NewPlayer(playerX, playerY),
 		Dungeon:  generatedDungeon,
 		Monsters: make([]*entity.Monster, 0),
+		FOV:      fov.NewFOVMap(width, height),
 		Running:  true,
 		Seed:     seed,
 	}
@@ -54,7 +58,26 @@ func NewGame(width, height int, seed int64) *Game {
 	// Spawn monsters in rooms (skip first room where player spawns)
 	newGame.spawnMonsters(rng)
 
+	// Compute initial FOV
+	newGame.ComputeFOV()
+
 	return newGame
+}
+
+// ComputeFOV calculates the field of view from the player's current position
+func (g *Game) ComputeFOV() {
+	px, py := g.Player.Position()
+	fov.Compute(g.FOV, g.Dungeon, px, py, playerFOVRadius)
+}
+
+// IsVisible returns true if the tile at (x, y) is currently visible to the player
+func (g *Game) IsVisible(x, y int) bool {
+	return g.FOV.IsVisible(x, y)
+}
+
+// IsExplored returns true if the tile at (x, y) has been explored by the player
+func (g *Game) IsExplored(x, y int) bool {
+	return g.FOV.IsExplored(x, y)
 }
 
 // spawnMonsters populates the dungeon with monsters
@@ -214,4 +237,7 @@ func (g *Game) tryMovePlayer(dir ui.Direction) {
 	}
 
 	g.Player.SetPosition(newX, newY)
+
+	// Recompute FOV after moving
+	g.ComputeFOV()
 }

@@ -94,7 +94,7 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 4: Monsters & Basic AI 🚧
+## Phase 4: Monsters & Basic AI ✅
 
 **Goal**: Populate dungeon with monsters
 
@@ -109,7 +109,7 @@ All tasks completed in Phase 2.
 - [x] Write tests for wander AI behavior (TDD - RED)
 - [x] Implement wander AI - random movement (TDD - GREEN)
 - [x] Integrate AI updates into game loop (monsters move after player)
-- [ ] Manual testing by user
+- [x] Manual testing by user
 
 **Deliverable**: Dungeon populated with wandering monsters that block movement.
 
@@ -117,17 +117,18 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 5: Field of View ⏳
+## Phase 5: Field of View 🚧
 
 **Goal**: Implement fog of war
 
 ### Tasks
-- [ ] Create `fov/fov.go` - shadowcasting algorithm
-- [ ] Compute FOV on player position change
-- [ ] Render visible tiles normally
-- [ ] Render "memory" tiles dimly (previously seen)
-- [ ] Hide monsters outside FOV
-- [ ] Write tests for FOV calculations
+- [x] Write tests for FOV calculations (TDD - RED)
+- [x] Create `fov/fov.go` - shadowcasting algorithm (TDD - GREEN)
+- [x] Compute FOV on player position change
+- [x] Render visible tiles normally
+- [x] Render "memory" tiles dimly (previously seen)
+- [x] Hide monsters outside FOV
+- [ ] Manual testing by user
 
 **Deliverable**: Fog of war with exploration memory.
 

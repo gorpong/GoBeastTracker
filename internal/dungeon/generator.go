@@ -38,6 +38,16 @@ func NewDungeon(width, height int) *Dungeon {
 	}
 }
 
+// GetWidth returns the dungeon width (implements fov.Map interface)
+func (d *Dungeon) GetWidth() int {
+	return d.Width
+}
+
+// GetHeight returns the dungeon height (implements fov.Map interface)
+func (d *Dungeon) GetHeight() int {
+	return d.Height
+}
+
 // GetTile returns the tile at (x, y), or nil if out of bounds
 func (d *Dungeon) GetTile(x, y int) *Tile {
 	if !d.InBounds(x, y) {
@@ -58,6 +68,15 @@ func (d *Dungeon) IsWalkable(x, y int) bool {
 		return false
 	}
 	return tile.Walkable()
+}
+
+// IsTransparent returns true if the tile at (x, y) allows light to pass through
+func (d *Dungeon) IsTransparent(x, y int) bool {
+	tile := d.GetTile(x, y)
+	if tile == nil {
+		return false
+	}
+	return tile.Transparent()
 }
 
 // GenerateDungeon creates a new dungeon with rooms and corridors

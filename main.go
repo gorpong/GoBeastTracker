@@ -44,9 +44,13 @@ func main() {
 	seed := time.Now().UnixNano()
 	gameState := game.NewGame(dungeonWidth, dungeonHeight, seed)
 
-	// Define styles
+	// Define styles for visible tiles
 	floorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
 	wallStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGray)
+	// Define styles for explored but not visible tiles (dimmed)
+	exploredFloorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkSlateGray)
+	exploredWallStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkSlateGray)
+	// Other styles
 	playerStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow).Bold(true)
 	hudStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen)
 
@@ -83,29 +87,52 @@ func main() {
 				worldX := screenX + cameraX
 				worldY := screenY + cameraY
 
+				// Only draw tiles that have been explored
+				if !gameState.IsExplored(worldX, worldY) {
+					continue
+				}
+
 				tile := gameState.Dungeon.GetTile(worldX, worldY)
 				if tile != nil {
 					var style tcell.Style
+					isVisible := gameState.IsVisible(worldX, worldY)
+
 					switch tile.Type {
 					case dungeon.TileFloor:
-						style = floorStyle
+						if isVisible {
+							style = floorStyle
+						} else {
+							style = exploredFloorStyle
+						}
 					case dungeon.TileWall:
-						style = wallStyle
+						if isVisible {
+							style = wallStyle
+						} else {
+							style = exploredWallStyle
+						}
 					default:
-						style = floorStyle
+						if isVisible {
+							style = floorStyle
+						} else {
+							style = exploredFloorStyle
+						}
 					}
 					screen.SetCell(screenX, screenY+1, tile.Glyph(), style)
 				}
 			}
 		}
 
-		// Draw monsters (relative to camera, offset by 1 for HUD)
+		// Draw monsters (only if visible, relative to camera, offset by 1 for HUD)
 		monsterStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
 		for _, monster := range gameState.Monsters {
 			if monster.Dead {
 				continue
 			}
 			mx, my := monster.Position()
+			// Only draw monsters that are visible to the player
+			if !gameState.IsVisible(mx, my) {
+				continue
+			}
 			monsterScreenX := mx - cameraX
 			monsterScreenY := my - cameraY + 1
 			if monsterScreenX >= 0 && monsterScreenX < screenW && monsterScreenY >= 1 && monsterScreenY < screenH-1 {
@@ -121,7 +148,7 @@ func main() {
 		}
 
 		// Draw HUD at top
-		title := "BeastTracker - Phase 4"
+		title := "BeastTracker - Phase 5"
 		screen.DrawString(0, 0, title, hudStyle)
 
 		// Draw position info
