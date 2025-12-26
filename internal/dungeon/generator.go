@@ -63,7 +63,7 @@ func (d *Dungeon) IsWalkable(x, y int) bool {
 // GenerateDungeon creates a new dungeon with rooms and corridors
 func GenerateDungeon(width, height int, seed int64) *Dungeon {
 	rng := rand.New(rand.NewSource(seed))
-	d := NewDungeon(width, height)
+	generatedDungeon := NewDungeon(width, height)
 
 	// Generate rooms
 	for i := 0; i < maxRooms; i++ {
@@ -78,7 +78,7 @@ func GenerateDungeon(width, height int, seed int64) *Dungeon {
 
 		// Check for overlap with existing rooms
 		overlaps := false
-		for _, other := range d.Rooms {
+		for _, other := range generatedDungeon.Rooms {
 			if newRoom.IntersectsWithPadding(other, roomPadding) {
 				overlaps = true
 				break
@@ -86,19 +86,19 @@ func GenerateDungeon(width, height int, seed int64) *Dungeon {
 		}
 
 		if !overlaps {
-			d.carveRoom(newRoom)
+			generatedDungeon.carveRoom(newRoom)
 
 			// Connect to previous room with corridor
-			if len(d.Rooms) > 0 {
-				prevRoom := d.Rooms[len(d.Rooms)-1]
-				d.carveCorridor(prevRoom, newRoom, rng)
+			if len(generatedDungeon.Rooms) > 0 {
+				prevRoom := generatedDungeon.Rooms[len(generatedDungeon.Rooms)-1]
+				generatedDungeon.carveCorridor(prevRoom, newRoom, rng)
 			}
 
-			d.Rooms = append(d.Rooms, newRoom)
+			generatedDungeon.Rooms = append(generatedDungeon.Rooms, newRoom)
 		}
 	}
 
-	return d
+	return generatedDungeon
 }
 
 // carveRoom carves out a room (fills with floor tiles)
