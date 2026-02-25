@@ -24,6 +24,7 @@
 **Goal**: Initialize project structure and verify tooling
 
 ### Tasks
+
 - [x] Initialize Go module (`go mod init`)
 - [x] Add tcell dependency
 - [x] Create directory structure (internal/, assets/)
@@ -33,7 +34,8 @@
 - [x] Verify terminal rendering works (manual test by user)
 - [x] Create .gitignore
 
-**Deliverable**: Running program that displays text in terminal and responds to quit command.
+**Deliverable**: Running program that displays text in terminal and responds to 
+quit command.
 
 **Commit Message**: `Phase 0: Project setup and tcell initialization`
 
@@ -44,6 +46,7 @@
 **Goal**: Basic grid rendering and player movement (with boundary collision)
 
 ### Tasks
+
 - [x] Write tests for input handling - Direction, Action types (TDD - RED)
 - [x] Create `ui/input.go` - keyboard event handling (TDD - GREEN)
 - [x] Write tests for player position and movement (TDD - RED)
@@ -67,6 +70,7 @@
 **Goal**: Procedurally generate dungeon layouts
 
 ### Tasks
+
 - [x] Write tests for tile types (TDD - RED)
 - [x] Create `dungeon/tile.go` - tile types with walkability/transparency (TDD - GREEN)
 - [x] Write tests for room structure (TDD - RED)
@@ -99,6 +103,7 @@ All tasks completed in Phase 2.
 **Goal**: Populate dungeon with monsters
 
 ### Tasks
+
 - [x] Write tests for Monster structure (TDD - RED)
 - [x] Create `entity/monster.go` - monster struct with HP, attack, AI type (TDD - GREEN)
 - [x] Define 4 regular monster types (Goblin, Rat, Spider, Bat)
@@ -122,6 +127,7 @@ All tasks completed in Phase 2.
 **Goal**: Implement fog of war
 
 ### Tasks
+
 - [x] Write tests for FOV calculations (TDD - RED)
 - [x] Create `fov/fov.go` - shadowcasting algorithm (TDD - GREEN)
 - [x] Compute FOV on player position change
@@ -141,6 +147,7 @@ All tasks completed in Phase 2.
 **Goal**: Bump-to-attack combat
 
 ### Tasks
+
 - [x] Write tests for player stats (TDD - RED)
 - [x] Add player stats (HP, ATK, DEF) to entity/player.go (TDD - GREEN)
 - [x] Write tests for combat mechanics (TDD - RED)
@@ -164,6 +171,7 @@ All tasks completed in Phase 2.
 **Goal**: Boss monster and hunt victory
 
 ### Tasks
+
 - [x] Write tests for boss monsters (TDD - RED)
 - [x] Define 5 boss monster types (Wyvern, Ogre, Troll, Cyclops, Minotaur)
 - [x] Add IsBoss field to Monster struct (TDD - GREEN)
@@ -188,6 +196,7 @@ All tasks completed in Phase 2.
 **Goal**: Item system with healing
 
 ### Tasks
+
 - [ ] Create `entity/item.go` - item struct
 - [ ] Define healing item types (potion, herbs)
 - [ ] Spawn items in dungeon
@@ -207,6 +216,7 @@ All tasks completed in Phase 2.
 **Goal**: Material drops and equipment crafting
 
 ### Tasks
+
 - [ ] Monsters drop materials on death (scales, claws, etc.)
 - [ ] Boss drops unique rare material
 - [ ] Create `craft/crafting.go` - recipe system
@@ -226,6 +236,7 @@ All tasks completed in Phase 2.
 **Goal**: Smarter monster behavior
 
 ### Tasks
+
 - [ ] Implement chase AI (pursue player when in FOV)
 - [ ] Boss-specific behaviors (aggressive, teleport, summon)
 - [ ] AI respects FOV (no cheating)
@@ -243,6 +254,7 @@ All tasks completed in Phase 2.
 **Goal**: Score tracking and high score persistence
 
 ### Tasks
+
 - [ ] Create `score/leaderboard.go` - scoring system
 - [ ] Score calculation:
   - Regular monster: 10 points
@@ -264,6 +276,7 @@ All tasks completed in Phase 2.
 **Goal**: Sequential hunts with difficulty scaling
 
 ### Tasks
+
 - [ ] After boss defeat, offer "Next Hunt" option
 - [ ] Persist player equipment across hunts
 - [ ] Scale difficulty: more/stronger monsters, tougher bosses
@@ -282,6 +295,7 @@ All tasks completed in Phase 2.
 **Goal**: Complete UI flow
 
 ### Tasks
+
 - [ ] Create `ui/menu.go` - menu system
 - [ ] Main menu: New Game, Continue, Leaderboard, Quit
 - [ ] Pause menu (ESC during game)
@@ -302,6 +316,7 @@ All tasks completed in Phase 2.
 **Goal**: Game state persistence
 
 ### Tasks
+
 - [ ] Create `save/save.go` - serialization system
 - [ ] Save game state to JSON
 - [ ] Save on quit or manual save command
@@ -320,6 +335,7 @@ All tasks completed in Phase 2.
 **Goal**: Tune gameplay feel
 
 ### Tasks
+
 - [ ] Balance monster HP/damage values
 - [ ] Tune item spawn rates
 - [ ] Adjust boss difficulty curve
@@ -338,11 +354,11 @@ All tasks completed in Phase 2.
 **Goal**: Ship-ready state
 
 ### Tasks
-- [ ] Write README.md (how to play, controls, gameplay loop)
+
+- [ ] Update README.md (how to play, controls, gameplay loop)
 - [ ] Code cleanup and documentation
 - [ ] Final bug sweep
 - [ ] Build instructions (cross-platform)
-- [ ] Add LICENSE file
 - [ ] Create release build
 
 **Deliverable**: Complete, documented, playable game.
