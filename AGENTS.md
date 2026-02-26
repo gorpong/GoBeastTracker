@@ -152,6 +152,21 @@ The goal is **polished, playable terminal roguelike with a clear Monster Hunter-
 * **Bug Reports**: User provides clear, actionable feedback about missing functionality (e.g., "monsters don't attack")
 * **Communication Style**: User appreciates concise updates and summaries without unnecessary verbosity
 
+### Phase 8 Lessons
+
+#### Testing Patterns for Randomness
+
+* Don't write tests that may randomly fail
+* Use multiple seeds when testing spawn mechanics
+* Bad: `if len(game.Items) == 0 { t.Error(...) }` with single seed
+* Good: Loop through 20 seeds, fail only if ALL seeds produce no items
+
+#### Key Binding Conflicts
+
+* Check existing bindings before adding new keys
+* WASD uses 'd' for right movement - don't reuse for drop
+* Solution: Use 'x' for drop mode instead
+
 ### Proper Markdown Fencing
 
 When interacting with the user and providing them with a Markdown response that
@@ -215,6 +230,8 @@ main.go             # Rendering loop, HUD, victory/game over screens
 2. **Variable Naming**: In functions >20 lines, use `generatedDungeon` not `d`, `testGame` not `g`, `monster` not `m`
 3. **Interface Methods**: When implementing interfaces like `fov.Map`, use methods not fields (e.g., `GetWidth()` not `Width`)
 4. **Commit Messages**: Can combine related phases in one commit with clear sections
+5. **Existing Tests**: When adding new key bindings or changing behavior, review existing tests in the same file first. Update test expectations before running tests to avoid false failures.
+6. **Package-level declarations**: Before adding constants, types, or functions to a package, check existing files in that package for declarations to avoid redeclaration errors.
 
 #### Effective TDD Workflow
 

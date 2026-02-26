@@ -536,3 +536,460 @@ func TestGameBossInLastRoom(t *testing.T) {
 
 // Ensure dungeon import is used
 var _ = dungeon.TileFloor
+
+// TestGameHasItems verifies items are spawned in the game
+func TestGameHasItems(t *testing.T) {
+	// Try multiple seeds to account for randomness in item spawning
+	itemsFound := false
+
+	for seed := int64(0); seed < 20; seed++ {
+		testGame := NewGame(100, 40, seed)
+		if len(testGame.Items) > 0 {
+			itemsFound = true
+			break
+		}
+	}
+
+	if !itemsFound {
+		t.Error("Items should spawn in at least one of 20 game seeds")
+	}
+}
+
+// TestGameItemsOnWalkableTiles verifies items spawn on walkable tiles
+func TestGameItemsOnWalkableTiles(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	for i, item := range testGame.Items {
+		x, y := item.Position()
+		if !testGame.Dungeon.IsWalkable(x, y) {
+			t.Errorf("Item %d at (%d, %d) is not on a walkable tile", i, x, y)
+		}
+	}
+}
+
+// TestGameItemsDontOverlapPlayer verifies items don't spawn on player
+func TestGameItemsDontOverlapPlayer(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	px, py := testGame.Player.Position()
+	for i, item := range testGame.Items {
+		ix, iy := item.Position()
+		if ix == px && iy == py {
+			t.Errorf("Item %d spawned on player position (%d, %d)", i, px, py)
+		}
+	}
+}
+
+// TestGameItemsDontOverlapMonsters verifies items don't spawn on monsters
+func TestGameItemsDontOverlapMonsters(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	for i, item := range testGame.Items {
+		ix, iy := item.Position()
+		if testGame.GetMonsterAt(ix, iy) != nil {
+			t.Errorf("Item %d spawned on monster position (%d, %d)", i, ix, iy)
+		}
+	}
+}
+
+// TestGameGetItemAt verifies GetItemAt returns correct item
+func TestGameGetItemAt(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if len(testGame.Items) == 0 {
+		t.Skip("No items to test")
+	}
+
+	// Get first item's position
+	firstItem := testGame.Items[0]
+	ix, iy := firstItem.Position()
+
+	found := testGame.GetItemAt(ix, iy)
+	if found == nil {
+		t.Errorf("GetItemAt(%d, %d) returned nil, expected item", ix, iy)
+	}
+	if found != firstItem {
+		t.Error("GetItemAt returned wrong item")
+	}
+
+	// Check empty position
+	emptyItem := testGame.GetItemAt(-999, -999)
+	if emptyItem != nil {
+		t.Error("GetItemAt should return nil for empty position")
+	}
+}
+
+// TestGameItemsDontOverlapEachOther verifies no two items share position
+func TestGameItemsDontOverlapEachOther(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	positions := make(map[string]bool)
+	for i, item := range testGame.Items {
+		x, y := item.Position()
+		key := fmt.Sprintf("%d,%d", x, y)
+		if positions[key] {
+			t.Errorf("Item %d at position %s overlaps with another item", i, key)
+		}
+		positions[key] = true
+	}
+}
+
+// TestGameRemoveItem verifies items can be removed from the game
+func TestGameRemoveItem(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if len(testGame.Items) == 0 {
+		t.Skip("No items to test")
+	}
+
+	initialCount := len(testGame.Items)
+	firstItem := testGame.Items[0]
+	ix, iy := firstItem.Position()
+
+	testGame.RemoveItem(firstItem)
+
+	if len(testGame.Items) != initialCount-1 {
+		t.Errorf("After RemoveItem: %d items, want %d", len(testGame.Items), initialCount-1)
+	}
+
+	// Item should no longer be at that position
+	if testGame.GetItemAt(ix, iy) == firstItem {
+		t.Error("Removed item should not be found at its position")
+	}
+}
+
+// TestGameItemTypes verifies both item types can spawn
+func TestGameItemTypes(t *testing.T) {
+	// Test with multiple seeds to increase chance of seeing both types
+	herbsFound := false
+	potionsFound := false
+
+	for seed := int64(0); seed < 20; seed++ {
+		testGame := NewGame(100, 40, seed)
+		for _, item := range testGame.Items {
+			switch item.Type {
+			case entity.ItemHerbs:
+				herbsFound = true
+			case entity.ItemPotion:
+				potionsFound = true
+			}
+		}
+		if herbsFound && potionsFound {
+			break
+		}
+	}
+
+	if !herbsFound {
+		t.Error("Herbs should be able to spawn (not found in 20 seeds)")
+	}
+	if !potionsFound {
+		t.Error("Potions should be able to spawn (not found in 20 seeds)")
+	}
+}
+
+// TestGamePickupItem verifies player can pick up items
+func TestGamePickupItem(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Place an item adjacent to player
+	px, py := testGame.Player.Position()
+	testItem := entity.NewItem(entity.ItemHerbs, px+1, py)
+	testGame.Items = append(testGame.Items, testItem)
+
+	initialItemCount := len(testGame.Items)
+	initialInventoryCount := testGame.Player.Inventory.Count()
+
+	// Move onto the item
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	// Item should be picked up
+	if testGame.Player.Inventory.Count() != initialInventoryCount+1 {
+		t.Errorf("Inventory count = %d, want %d",
+			testGame.Player.Inventory.Count(), initialInventoryCount+1)
+	}
+
+	// Item should be removed from ground
+	if len(testGame.Items) != initialItemCount-1 {
+		t.Errorf("Ground item count = %d, want %d",
+			len(testGame.Items), initialItemCount-1)
+	}
+}
+
+// TestGamePickupItemMessage verifies pickup generates a message
+func TestGamePickupItemMessage(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	px, py := testGame.Player.Position()
+	testItem := entity.NewItem(entity.ItemPotion, px+1, py)
+	testGame.Items = append(testGame.Items, testItem)
+
+	testGame.Messages = nil
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if len(testGame.Messages) == 0 {
+		t.Error("Expected pickup message")
+	}
+
+	foundPickupMsg := false
+	for _, msg := range testGame.Messages {
+		if contains(msg, "picked up") || contains(msg, "Picked up") {
+			foundPickupMsg = true
+			break
+		}
+	}
+	if !foundPickupMsg {
+		t.Errorf("Expected pickup message, got: %v", testGame.Messages)
+	}
+}
+
+// contains checks if substr is in s (simple helper for tests)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// TestGamePickupItemFullInventory verifies pickup fails when inventory is full
+func TestGamePickupItemFullInventory(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Fill player inventory
+	for testGame.Player.Inventory.Count() < testGame.Player.Inventory.Capacity() {
+		filler := entity.NewItem(entity.ItemHerbs, 0, 0)
+		testGame.Player.Inventory.Add(filler)
+	}
+
+	// Place an item adjacent to player
+	px, py := testGame.Player.Position()
+	testItem := entity.NewItem(entity.ItemPotion, px+1, py)
+	testGame.Items = append(testGame.Items, testItem)
+
+	initialGroundItems := len(testGame.Items)
+	testGame.Messages = nil
+
+	// Try to move onto the item
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	// Player should have moved (items don't block movement)
+	newPx, newPy := testGame.Player.Position()
+	if newPx != px+1 || newPy != py {
+		t.Error("Player should still move even when inventory is full")
+	}
+
+	// Item should still be on ground
+	if len(testGame.Items) != initialGroundItems {
+		t.Errorf("Item should remain on ground when inventory full, got %d items",
+			len(testGame.Items))
+	}
+
+	// Should have a "full" message
+	foundFullMsg := false
+	for _, msg := range testGame.Messages {
+		if contains(msg, "full") || contains(msg, "Full") {
+			foundFullMsg = true
+			break
+		}
+	}
+	if !foundFullMsg {
+		t.Errorf("Expected inventory full message, got: %v", testGame.Messages)
+	}
+}
+
+// TestGameUseItem verifies using an item from inventory
+func TestGameUseItem(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Damage player first
+	testGame.Player.TakeDamage(50)
+	initialHP := testGame.Player.HP
+
+	// Add a potion to inventory
+	potion := entity.NewItem(entity.ItemPotion, 0, 0)
+	testGame.Player.Inventory.Add(potion)
+
+	// Use item in slot 1
+	testGame.HandleInput(ui.ActionUseItem, ui.DirNone)
+	testGame.UseItemInSlot(1)
+
+	// Player should be healed
+	expectedHP := initialHP + entity.PotionHealing
+	if expectedHP > testGame.Player.MaxHP {
+		expectedHP = testGame.Player.MaxHP
+	}
+
+	if testGame.Player.HP != expectedHP {
+		t.Errorf("Player HP = %d, want %d", testGame.Player.HP, expectedHP)
+	}
+
+	// Item should be removed from inventory
+	if testGame.Player.Inventory.Count() != 0 {
+		t.Error("Item should be removed from inventory after use")
+	}
+}
+
+// TestGameUseItemEmptySlot verifies using empty slot does nothing
+func TestGameUseItemEmptySlot(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	initialHP := testGame.Player.HP
+	testGame.Messages = nil
+
+	testGame.UseItemInSlot(1)
+
+	if testGame.Player.HP != initialHP {
+		t.Error("Using empty slot should not change HP")
+	}
+
+	// Should have an error message
+	if len(testGame.Messages) == 0 {
+		t.Error("Expected message when using empty slot")
+	}
+}
+
+// TestGameUseItemAtFullHealth verifies using healing at full HP
+func TestGameUseItemAtFullHealth(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Add herbs to inventory
+	herbs := entity.NewItem(entity.ItemHerbs, 0, 0)
+	testGame.Player.Inventory.Add(herbs)
+
+	testGame.Messages = nil
+
+	testGame.UseItemInSlot(1)
+
+	// Should still consume the item (player choice to use it)
+	if testGame.Player.Inventory.Count() != 0 {
+		t.Error("Item should be consumed even at full health")
+	}
+
+	// HP should still be at max
+	if testGame.Player.HP != testGame.Player.MaxHP {
+		t.Errorf("HP should be at max, got %d", testGame.Player.HP)
+	}
+}
+
+// TestGameInputModeDropMode verifies drop mode state tracking
+func TestGameInputModeDropMode(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	if testGame.InputMode != InputModeNormal {
+		t.Errorf("Initial InputMode = %v, want InputModeNormal", testGame.InputMode)
+	}
+
+	// Enter drop mode
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+
+	if testGame.InputMode != InputModeDropping {
+		t.Errorf("After drop key: InputMode = %v, want InputModeDropping", testGame.InputMode)
+	}
+}
+
+// TestGameDropItemQuick verifies quick drop with x + number
+func TestGameDropItemQuick(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Add item to inventory
+	herbs := entity.NewItem(entity.ItemHerbs, 0, 0)
+	testGame.Player.Inventory.Add(herbs)
+
+	px, py := testGame.Player.Position()
+	initialGroundItems := len(testGame.Items)
+
+	// Enter drop mode then press 1
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+	testGame.HandleDropModeInput('1')
+
+	// Item should be on ground at player position
+	if len(testGame.Items) != initialGroundItems+1 {
+		t.Errorf("Ground items = %d, want %d", len(testGame.Items), initialGroundItems+1)
+	}
+
+	droppedItem := testGame.GetItemAt(px, py)
+	if droppedItem == nil {
+		t.Error("Dropped item should be at player position")
+	}
+
+	// Item should be removed from inventory
+	if testGame.Player.Inventory.Count() != 0 {
+		t.Error("Item should be removed from inventory after drop")
+	}
+
+	// Should return to normal mode
+	if testGame.InputMode != InputModeNormal {
+		t.Errorf("InputMode = %v, want InputModeNormal after drop", testGame.InputMode)
+	}
+}
+
+// TestGameDropModeOpenMenu verifies x + x opens drop menu
+func TestGameDropModeOpenMenu(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Enter drop mode then press x again
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+	testGame.HandleDropModeInput('x')
+
+	if testGame.InputMode != InputModeDropMenu {
+		t.Errorf("InputMode = %v, want InputModeDropMenu", testGame.InputMode)
+	}
+}
+
+// TestGameDropModeOpenMenuWithI verifies x + i opens drop menu
+func TestGameDropModeOpenMenuWithI(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	// Enter drop mode then press i
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+	testGame.HandleDropModeInput('i')
+
+	if testGame.InputMode != InputModeDropMenu {
+		t.Errorf("InputMode = %v, want InputModeDropMenu", testGame.InputMode)
+	}
+}
+
+// TestGameDropModeCancelOnOtherKey verifies drop mode cancels on unrelated key
+func TestGameDropModeCancelOnOtherKey(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+	testGame.HandleDropModeInput('z')
+
+	if testGame.InputMode != InputModeNormal {
+		t.Errorf("InputMode = %v, want InputModeNormal after cancel", testGame.InputMode)
+	}
+}
+
+// TestGameDropEmptySlot verifies dropping from empty slot shows message
+func TestGameDropEmptySlot(t *testing.T) {
+	testGame := NewGame(100, 40, 12345)
+
+	testGame.Messages = nil
+
+	testGame.HandleInput(ui.ActionDropMode, ui.DirNone)
+	testGame.HandleDropModeInput('1')
+
+	// Should have error message
+	foundEmptyMsg := false
+	for _, msg := range testGame.Messages {
+		if contains(msg, "empty") || contains(msg, "Empty") || contains(msg, "nothing") {
+			foundEmptyMsg = true
+			break
+		}
+	}
+	if !foundEmptyMsg {
+		t.Errorf("Expected empty slot message, got: %v", testGame.Messages)
+	}
+
+	// Should return to normal mode
+	if testGame.InputMode != InputModeNormal {
+		t.Errorf("InputMode = %v, want InputModeNormal", testGame.InputMode)
+	}
+}

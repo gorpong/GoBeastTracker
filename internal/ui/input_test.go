@@ -66,9 +66,13 @@ func TestParseAction(t *testing.T) {
 		{"Move h", tcell.KeyRune, 'h', ActionMove},
 		{"Move w", tcell.KeyRune, 'w', ActionMove},
 
+		// Inventory and drop actions
+		{"Inventory i", tcell.KeyRune, 'i', ActionInventory},
+		{"Drop mode x", tcell.KeyRune, 'x', ActionDropMode},
+
 		// No action for unbound keys
-		{"Unbound x", tcell.KeyRune, 'x', ActionNone},
 		{"Unbound z", tcell.KeyRune, 'z', ActionNone},
+		{"Unbound y", tcell.KeyRune, 'y', ActionNone},
 	}
 
 	for _, tt := range tests {
@@ -125,5 +129,103 @@ func TestDirectionString(t *testing.T) {
 				t.Errorf("Direction.String() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestParseActionInventory verifies inventory key mapping
+func TestParseActionInventory(t *testing.T) {
+	result := ParseAction(tcell.KeyRune, 'i')
+	if result != ActionInventory {
+		t.Errorf("ParseAction('i') = %v, want ActionInventory", result)
+	}
+}
+
+// TestParseActionDropMode verifies drop mode key mapping
+func TestParseActionDropMode(t *testing.T) {
+	result := ParseAction(tcell.KeyRune, 'x')
+	if result != ActionDropMode {
+		t.Errorf("ParseAction('x') = %v, want ActionDropMode", result)
+	}
+}
+
+// TestParseActionUseItem verifies number keys trigger item use
+func TestParseActionUseItem(t *testing.T) {
+	tests := []struct {
+		name string
+		rune rune
+		want Action
+	}{
+		{"Key 1", '1', ActionUseItem},
+		{"Key 2", '2', ActionUseItem},
+		{"Key 3", '3', ActionUseItem},
+		{"Key 4", '4', ActionUseItem},
+		{"Key 5", '5', ActionUseItem},
+		{"Key 6", '6', ActionUseItem},
+		{"Key 7", '7', ActionUseItem},
+		{"Key 8", '8', ActionUseItem},
+		{"Key 9", '9', ActionUseItem},
+		{"Key 0 is not item", '0', ActionNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ParseAction(tcell.KeyRune, tt.rune)
+			if result != tt.want {
+				t.Errorf("ParseAction('%c') = %v, want %v", tt.rune, result, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseSlotNumber verifies slot number extraction from key
+func TestParseSlotNumber(t *testing.T) {
+	tests := []struct {
+		name     string
+		rune     rune
+		wantSlot int
+		wantOK   bool
+	}{
+		{"Key 1", '1', 1, true},
+		{"Key 2", '2', 2, true},
+		{"Key 3", '3', 3, true},
+		{"Key 4", '4', 4, true},
+		{"Key 5", '5', 5, true},
+		{"Key 6", '6', 6, true},
+		{"Key 7", '7', 7, true},
+		{"Key 8", '8', 8, true},
+		{"Key 9", '9', 9, true},
+		{"Key 0 invalid", '0', 0, false},
+		{"Letter invalid", 'a', 0, false},
+		{"Symbol invalid", '!', 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			slot, ok := ParseSlotNumber(tt.rune)
+			if ok != tt.wantOK {
+				t.Errorf("ParseSlotNumber('%c') ok = %v, want %v", tt.rune, ok, tt.wantOK)
+			}
+			if slot != tt.wantSlot {
+				t.Errorf("ParseSlotNumber('%c') slot = %d, want %d", tt.rune, slot, tt.wantSlot)
+			}
+		})
+	}
+}
+
+// TestParseActionConfirm verifies enter key mapping
+func TestParseActionConfirm(t *testing.T) {
+	result := ParseAction(tcell.KeyEnter, 0)
+	if result != ActionConfirm {
+		t.Errorf("ParseAction(KeyEnter) = %v, want ActionConfirm", result)
+	}
+}
+
+// TestParseActionCancel verifies escape cancels without quitting in menus
+func TestParseActionCancel(t *testing.T) {
+	// Note: Escape is both Quit and Cancel - context determines behavior
+	// For now, ActionQuit takes precedence; game logic will handle menu context
+	result := ParseAction(tcell.KeyEscape, 0)
+	if result != ActionQuit {
+		t.Errorf("ParseAction(KeyEscape) = %v, want ActionQuit", result)
 	}
 }

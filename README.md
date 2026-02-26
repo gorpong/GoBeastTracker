@@ -5,7 +5,7 @@ Hunt down powerful boss monsters in procedurally generated dungeons.
 
 ## Current Status
 
-**Phases Complete: 0-7** (out of 16 planned phases)
+**Phases Complete: 0-8** (out of 16 planned phases)
 
 The game is currently playable with core mechanics implemented:
 
@@ -15,6 +15,8 @@ The game is currently playable with core mechanics implemented:
 - ✅ Regular monsters with wander AI
 - ✅ Boss monsters with victory condition
 - ✅ Game over and victory screens
+- ✅ Item system with healing (herbs and potions)
+- ✅ Inventory management with pickup/drop mechanics
 
 ## Game Mechanics
 
@@ -27,7 +29,25 @@ regular monsters.
 ### Controls
 
 - **Movement/Attack**: Arrow keys, HJKL (vi-style), or WASD
+- **Use Item**: 1-9 (uses item in that inventory slot)
+- **Inventory**: I (toggle inventory view)
+- **Drop Item**: X + 1-9 (quick drop) or X + X (drop menu)
 - **Quit**: Q or ESC
+
+### Items
+
+Items spawn randomly in dungeon rooms and are automatically picked up when walked over (if inventory has space).
+
+| Item   | Glyph | Healing | Spawn Rate |
+|--------|-------|---------|------------|
+| Herbs  |  `"`  |  25 HP  |    75%     |
+| Potion |  `!`  |  60 HP  |    25%     |
+
+### Inventory
+
+- **Capacity**: 6 slots
+- **Display**: Shown in HUD as `[1:"] [2:!] [3:-]` etc.
+- **Full Inventory**: Items remain on ground with warning message
 
 ### Combat
 
@@ -71,9 +91,10 @@ One boss spawns in the furthest room from the player:
 
 ### HUD Information
 
-- **Top Row**: Title, HP (color-coded: green/yellow/red), Boss target info
-- **Second Row**: ATK/DEF stats, current position
-- **Bottom**: Latest combat message and control instructions
+- **Row 1**: Title, HP (color-coded: green/yellow/red), Boss target info
+- **Row 2**: ATK/DEF stats, current position
+- **Row 3**: Inventory bar showing items in slots 1-6
+- **Bottom**: Latest message and context-sensitive controls
 
 ## Installation & Running
 
@@ -164,6 +185,8 @@ This project follows strict TDD:
 3. **Watch Your HP**: The color-coded HP display warns you when you're in danger (green > yellow > red)
 4. **Track the Boss**: The HUD shows boss HP so you can plan your approach
 5. **Mind the Corridors**: Narrow passages can protect you from being surrounded
+6. **Conserve Potions**: Herbs are common but weak; save potions for emergencies
+7. **Manage Inventory**: Drop herbs to make room for potions when inventory is full
 
 ## Technical Details
 

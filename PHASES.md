@@ -191,21 +191,28 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 8: Items & Healing ⏳
+## Phase 8: Items & Healing ✅
 
 **Goal**: Item system with healing
 
 ### Tasks
 
-- [ ] Create `entity/item.go` - item struct
-- [ ] Define healing item types (potion, herbs)
-- [ ] Spawn items in dungeon
-- [ ] Inventory system (list, pickup on walk-over)
-- [ ] Use item command (keybind)
-- [ ] Create `ui/hud.go` - display HP and inventory
-- [ ] Write tests for inventory operations
+- [x] Create `entity/item.go` - item struct with ItemType enum
+- [x] Define healing item types (Herbs 25HP, Potion 60HP)
+- [x] Create `entity/inventory.go` - inventory management with capacity
+- [x] Add Inventory field to Player with Heal() method
+- [x] Spawn items in dungeon (0-2 per room, weighted random)
+- [x] Implement auto-pickup on walk-over (if space available)
+- [x] Inventory full message when no space
+- [x] Use item command (number keys 1-9)
+- [x] Drop mode ('x' + number or 'x' + 'x' for menu)
+- [x] Update `ui/input.go` - new actions for inventory/drop/use
+- [x] Render items on map (herbs: `"`, potions: `!`)
+- [x] Display inventory bar in HUD
+- [x] Context-sensitive instructions based on input mode
+- [x] Write tests for all new functionality
 
-**Deliverable**: Player can find and use healing items.
+**Deliverable**: Player can find, pick up, use, and drop healing items.
 
 **Commit Message**: `Phase 8: Item system and healing`
 
