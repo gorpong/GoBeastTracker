@@ -1,6 +1,9 @@
 package entity
 
 import (
+	"math/rand"
+	"time"
+
 	"beasttracker/internal/ui"
 )
 
@@ -26,16 +29,17 @@ func (a AIType) String() string {
 
 // Monster represents an enemy in the game
 type Monster struct {
-	Name   string
-	Glyph  rune
-	X      int
-	Y      int
-	HP     int
-	MaxHP  int
-	Attack int
-	AI     AIType
-	Dead   bool
-	IsBoss bool
+	Name      string
+	Glyph     rune
+	X         int
+	Y         int
+	HP        int
+	MaxHP     int
+	Attack    int
+	AI        AIType
+	Dead      bool
+	IsBoss    bool
+	DropTable *DropTable // Materials dropped on death
 }
 
 // NewMonster creates a new monster with the specified attributes
@@ -100,4 +104,70 @@ func (m *Monster) TakeDamage(damage int) {
 // IsAlive returns true if the monster is still alive
 func (m *Monster) IsAlive() bool {
 	return !m.Dead
+}
+
+// DropTable defines what materials a monster can drop on death
+type DropTable struct {
+	Guaranteed []MaterialType // Always drops these
+	Possible   []MaterialType // 50% chance each
+}
+
+// NewDropTable creates a new drop table with guaranteed and possible drops
+func NewDropTable(guaranteed, possible []MaterialType) *DropTable {
+	return &DropTable{
+		Guaranteed: guaranteed,
+		Possible:   possible,
+	}
+}
+
+// GenerateDrops generates the actual drops based on the drop table
+func (dt *DropTable) GenerateDrops() []MaterialType {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	drops := make([]MaterialType, 0)
+
+	// Add all guaranteed drops
+	drops = append(drops, dt.Guaranteed...)
+
+	// Roll for each possible drop (50% chance)
+	for _, matType := range dt.Possible {
+		if rng.Intn(2) == 0 {
+			drops = append(drops, matType)
+		}
+	}
+
+	return drops
+}
+
+// GetRegularMonsterDropTable returns the drop table for regular monsters
+func GetRegularMonsterDropTable() *DropTable {
+	return NewDropTable(
+		[]MaterialType{},         // No guaranteed drops
+		GetCommonMaterialTypes(), // Can drop any common material
+	)
+}
+
+// GetBossDropTable returns the drop table for a specific boss type
+func GetBossDropTable(bossName string) *DropTable {
+	var rareMaterial MaterialType
+
+	switch bossName {
+	case "Wyvern":
+		rareMaterial = MaterialWyvernScale
+	case "Ogre":
+		rareMaterial = MaterialOgreHide
+	case "Troll":
+		rareMaterial = MaterialTrollClaw
+	case "Cyclops":
+		rareMaterial = MaterialCyclopsEye
+	case "Minotaur":
+		rareMaterial = MaterialMinotaurHorn
+	default:
+		// Unknown boss, default to Wyvern
+		rareMaterial = MaterialWyvernScale
+	}
+
+	return NewDropTable(
+		[]MaterialType{rareMaterial}, // Guaranteed rare drop
+		GetCommonMaterialTypes(),     // Can also drop common materials
+	)
 }

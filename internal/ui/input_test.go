@@ -229,3 +229,25 @@ func TestParseActionCancel(t *testing.T) {
 		t.Errorf("ParseAction(KeyEscape) = %v, want ActionQuit", result)
 	}
 }
+
+func TestParseActionCraft(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'c')
+
+	if action != ActionCraft {
+		t.Errorf("ParseAction for 'c' = %v, want ActionCraft", action)
+	}
+}
+
+func TestParseActionCraftUppercase(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'C')
+
+	if action != ActionCraft {
+		t.Errorf("ParseAction for 'C' = %v, want ActionCraft", action)
+	}
+}
+
+func TestActionCraftString(t *testing.T) {
+	if ActionCraft.String() != "Craft" {
+		t.Errorf("ActionCraft.String() = %q, want \"Craft\"", ActionCraft.String())
+	}
+}

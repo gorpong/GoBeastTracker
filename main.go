@@ -41,7 +41,6 @@ func main() {
 	seed := time.Now().UnixNano()
 	gameState := game.NewGame(dungeonWidth, dungeonHeight, seed)
 
-	// Define styles
 	floorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
 	wallStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGray)
 	exploredFloorStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkSlateGray)
@@ -52,11 +51,15 @@ func main() {
 	bossStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPurple).Bold(true)
 	monsterStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
 	itemStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorAqua)
+	materialStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorOrange)
+	rareMaterialStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGold).Bold(true)
 	inventoryStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorSilver)
 	menuStyle := tcell.StyleDefault.Background(tcell.ColorDarkBlue).Foreground(tcell.ColorWhite)
 	menuHeaderStyle := tcell.StyleDefault.Background(tcell.ColorDarkBlue).Foreground(tcell.ColorYellow).Bold(true)
+	craftableStyle := tcell.StyleDefault.Background(tcell.ColorDarkBlue).Foreground(tcell.ColorGreen)
+	uncraftableStyle := tcell.StyleDefault.Background(tcell.ColorDarkBlue).Foreground(tcell.ColorDarkGray)
+	selectedStyle := tcell.StyleDefault.Background(tcell.ColorBlue).Foreground(tcell.ColorWhite).Bold(true)
 
-	// Main game loop
 	for gameState.Running {
 		screen.Clear()
 
@@ -77,7 +80,6 @@ func main() {
 
 		px, py := gameState.Player.Position()
 
-		// Reserve 3 rows for HUD at top, 2 rows for messages/instructions at bottom
 		viewHeight := screenH - 5
 		cameraX := px - screenW/2
 		cameraY := py - viewHeight/2
@@ -95,7 +97,6 @@ func main() {
 			cameraY = dungeonHeight - viewHeight
 		}
 
-		// Draw dungeon tiles (offset by 3 for HUD rows)
 		for screenY := 0; screenY < viewHeight; screenY++ {
 			for screenX := 0; screenX < screenW; screenX++ {
 				worldX := screenX + cameraX
@@ -135,7 +136,22 @@ func main() {
 			}
 		}
 
-		// Draw items (only if visible)
+		for _, material := range gameState.Materials {
+			matX, matY := material.Position()
+			if !gameState.IsVisible(matX, matY) {
+				continue
+			}
+			matScreenX := matX - cameraX
+			matScreenY := matY - cameraY + 3
+			if matScreenX >= 0 && matScreenX < screenW && matScreenY >= 3 && matScreenY < screenH-2 {
+				style := materialStyle
+				if material.Type.IsRare() {
+					style = rareMaterialStyle
+				}
+				screen.SetCell(matScreenX, matScreenY, material.Glyph(), style)
+			}
+		}
+
 		for _, item := range gameState.Items {
 			ix, iy := item.Position()
 			if !gameState.IsVisible(ix, iy) {
@@ -148,7 +164,6 @@ func main() {
 			}
 		}
 
-		// Draw monsters (only if visible)
 		for _, monster := range gameState.Monsters {
 			if monster.Dead {
 				continue
@@ -168,20 +183,17 @@ func main() {
 			}
 		}
 
-		// Draw player
 		playerScreenX := px - cameraX
 		playerScreenY := py - cameraY + 3
 		if playerScreenX >= 0 && playerScreenX < screenW && playerScreenY >= 3 && playerScreenY < screenH-2 {
 			screen.SetCell(playerScreenX, playerScreenY, gameState.Player.Glyph, playerStyle)
 		}
 
-		// Draw HUD (3 rows at top)
-		// Row 0: Title and HP
 		title := "BeastTracker"
 		screen.DrawString(0, 0, title, hudStyle)
 
-		hpInfo := fmt.Sprintf("HP: %d/%d", gameState.Player.HP, gameState.Player.MaxHP)
-		screen.DrawString(len(title)+2, 0, hpInfo, getHPStyle(gameState.Player.HP, gameState.Player.MaxHP))
+		hpInfo := fmt.Sprintf("HP:%d/%d", gameState.Player.HP, gameState.Player.EffectiveMaxHP())
+		screen.DrawString(len(title)+2, 0, hpInfo, getHPStyle(gameState.Player.HP, gameState.Player.EffectiveMaxHP()))
 
 		boss := gameState.GetBoss()
 		if boss != nil && !boss.Dead {
@@ -189,17 +201,25 @@ func main() {
 			screen.DrawString(screenW-len(bossInfo)-1, 0, bossInfo, bossStyle)
 		}
 
-		// Row 1: ATK/DEF and position
-		statsInfo := fmt.Sprintf("ATK:%d DEF:%d", gameState.Player.Attack, gameState.Player.Defense)
+		statsInfo := fmt.Sprintf("ATK:%d DEF:%d", gameState.Player.EffectiveAttack(), gameState.Player.EffectiveDefense())
 		screen.DrawString(0, 1, statsInfo, hudStyle)
+
+		visibleMonsters := gameState.GetVisibleMonsters()
+		monsterInfoX := len(statsInfo) + 2
+		for _, monster := range visibleMonsters {
+			info := fmt.Sprintf("%s:%d/%d ", monster.Name, monster.HP, monster.MaxHP)
+			if monsterInfoX+len(info) < screenW-15 {
+				screen.DrawString(monsterInfoX, 1, info, monsterStyle)
+				monsterInfoX += len(info)
+			}
+		}
 
 		posInfo := fmt.Sprintf("Pos:(%d,%d)", px, py)
 		screen.DrawString(screenW-len(posInfo)-1, 1, posInfo, hudStyle)
 
-		// Row 2: Inventory display
-		drawInventoryBar(screen, gameState.Player.Inventory, 0, 2, screenW, inventoryStyle, itemStyle)
+		drawInventoryBar(screen, gameState.Player.Inventory, 0, 2, screenW/2, inventoryStyle, itemStyle)
+		drawMaterialPouch(screen, gameState.Player.MaterialPouch, screenW/2, 2, screenW/2, inventoryStyle, materialStyle)
 
-		// Draw messages (second to last row)
 		messageRow := screenH - 2
 		if len(gameState.Messages) > 0 {
 			lastMessage := gameState.Messages[len(gameState.Messages)-1]
@@ -209,18 +229,19 @@ func main() {
 			screen.DrawString(0, messageRow, lastMessage, messageStyle)
 		}
 
-		// Draw instructions (last row) - context sensitive
 		instructions := getInstructionsForMode(gameState.InputMode)
 		screen.DrawString(0, screenH-1, instructions, floorStyle)
 
-		// Draw drop menu overlay if in drop menu mode
 		if gameState.InputMode == game.InputModeDropMenu {
 			drawDropMenu(screen, gameState.Player.Inventory, screenW, screenH, menuStyle, menuHeaderStyle, itemStyle)
 		}
 
+		if gameState.InputMode == game.InputModeCrafting {
+			drawCraftingMenu(screen, gameState, screenW, screenH, menuStyle, menuHeaderStyle, craftableStyle, uncraftableStyle, selectedStyle)
+		}
+
 		screen.Show()
 
-		// Handle input
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
@@ -231,14 +252,13 @@ func main() {
 	}
 }
 
-// drawInventoryBar renders the inventory as a horizontal bar
 func drawInventoryBar(screen *ui.Screen, inv *entity.Inventory, x, y, maxWidth int, defaultStyle, itemStyle tcell.Style) {
-	label := "Inv: "
+	label := "Inv:"
 	screen.DrawString(x, y, label, defaultStyle)
 
 	slotX := x + len(label)
 	for slot := 1; slot <= inv.Capacity(); slot++ {
-		if slotX >= maxWidth-4 {
+		if slotX >= x+maxWidth-4 {
 			break
 		}
 
@@ -259,27 +279,44 @@ func drawInventoryBar(screen *ui.Screen, inv *entity.Inventory, x, y, maxWidth i
 	}
 }
 
-// drawDropMenu renders the drop menu overlay
+func drawMaterialPouch(screen *ui.Screen, pouch *entity.MaterialPouch, x, y, maxWidth int, defaultStyle, materialStyle tcell.Style) {
+	label := "Mat:"
+	screen.DrawString(x, y, label, defaultStyle)
+
+	materials := pouch.AllMaterials()
+	if len(materials) == 0 {
+		screen.DrawString(x+len(label)+1, y, "(empty)", defaultStyle)
+		return
+	}
+
+	matX := x + len(label) + 1
+	for _, matType := range materials {
+		count := pouch.Count(matType)
+		info := fmt.Sprintf("%c:%d ", matType.Glyph(), count)
+		if matX+len(info) >= x+maxWidth {
+			break
+		}
+		screen.DrawString(matX, y, info, materialStyle)
+		matX += len(info)
+	}
+}
+
 func drawDropMenu(screen *ui.Screen, inv *entity.Inventory, screenW, screenH int, menuStyle, headerStyle, itemStyle tcell.Style) {
-	// Menu dimensions
 	menuWidth := 30
 	menuHeight := inv.Capacity() + 4
 	menuX := (screenW - menuWidth) / 2
 	menuY := (screenH - menuHeight) / 2
 
-	// Draw menu background
 	for dy := 0; dy < menuHeight; dy++ {
 		for dx := 0; dx < menuWidth; dx++ {
 			screen.SetCell(menuX+dx, menuY+dy, ' ', menuStyle)
 		}
 	}
 
-	// Draw header
 	header := "== Drop Item =="
 	headerX := menuX + (menuWidth-len(header))/2
 	screen.DrawString(headerX, menuY+1, header, headerStyle)
 
-	// Draw inventory items
 	for slot := 1; slot <= inv.Capacity(); slot++ {
 		item := inv.GetSlot(slot)
 		var line string
@@ -296,13 +333,76 @@ func drawDropMenu(screen *ui.Screen, inv *entity.Inventory, screenW, screenH int
 		screen.DrawString(menuX+2, menuY+2+slot, line, style)
 	}
 
-	// Draw instructions
 	instrLine := "Press 1-9 or ESC to cancel"
 	instrX := menuX + (menuWidth-len(instrLine))/2
 	screen.DrawString(instrX, menuY+menuHeight-1, instrLine, menuStyle)
 }
 
-// getInstructionsForMode returns context-sensitive instructions
+func drawCraftingMenu(screen *ui.Screen, gameState *game.Game, screenW, screenH int, menuStyle, headerStyle, craftableStyle, uncraftableStyle, selectedStyle tcell.Style) {
+	recipes := gameState.GetAllRecipes()
+
+	menuWidth := 50
+	menuHeight := len(recipes) + 8
+	if menuHeight > screenH-4 {
+		menuHeight = screenH - 4
+	}
+	menuX := (screenW - menuWidth) / 2
+	menuY := (screenH - menuHeight) / 2
+
+	for dy := 0; dy < menuHeight; dy++ {
+		for dx := 0; dx < menuWidth; dx++ {
+			screen.SetCell(menuX+dx, menuY+dy, ' ', menuStyle)
+		}
+	}
+
+	header := "== Crafting =="
+	headerX := menuX + (menuWidth-len(header))/2
+	screen.DrawString(headerX, menuY+1, header, headerStyle)
+
+	visibleRecipes := menuHeight - 6
+	startIdx := 0
+	if gameState.CraftingCursor >= visibleRecipes {
+		startIdx = gameState.CraftingCursor - visibleRecipes + 1
+	}
+
+	for i := 0; i < visibleRecipes && startIdx+i < len(recipes); i++ {
+		recipeIdx := startIdx + i
+		recipe := recipes[recipeIdx]
+		canCraft := recipe.CanCraft(gameState.Player.MaterialPouch)
+
+		var style tcell.Style
+		if recipeIdx == gameState.CraftingCursor {
+			style = selectedStyle
+		} else if canCraft {
+			style = craftableStyle
+		} else {
+			style = uncraftableStyle
+		}
+
+		prefix := "  "
+		if recipeIdx == gameState.CraftingCursor {
+			prefix = "> "
+		}
+
+		line := fmt.Sprintf("%s%s (%s)", prefix, recipe.Name, recipe.Result.StatsString())
+		if len(line) > menuWidth-4 {
+			line = line[:menuWidth-4]
+		}
+		screen.DrawString(menuX+2, menuY+3+i, line, style)
+	}
+
+	selectedRecipe := recipes[gameState.CraftingCursor]
+	ingredientLine := "Needs: " + selectedRecipe.IngredientsString()
+	if len(ingredientLine) > menuWidth-4 {
+		ingredientLine = ingredientLine[:menuWidth-4]
+	}
+	screen.DrawString(menuX+2, menuY+menuHeight-3, ingredientLine, menuStyle)
+
+	instrLine := "↑↓:Select Enter:Craft ESC:Close"
+	instrX := menuX + (menuWidth-len(instrLine))/2
+	screen.DrawString(instrX, menuY+menuHeight-1, instrLine, menuStyle)
+}
+
 func getInstructionsForMode(mode game.InputMode) string {
 	switch mode {
 	case game.InputModeDropping:
@@ -311,12 +411,13 @@ func getInstructionsForMode(mode game.InputMode) string {
 		return "Drop menu: Press 1-9 to drop, ESC to cancel"
 	case game.InputModeInventory:
 		return "Inventory: Press 1-9 to use, ESC to close"
+	case game.InputModeCrafting:
+		return "Crafting: ↑↓ select, Enter craft, ESC close"
 	default:
-		return "Move: arrows/hjkl/wasd | Items: 1-9 use, i inv, x drop | Quit: q/ESC"
+		return "Move:arrows/hjkl | 1-9:use | x:drop | c:craft | q:quit"
 	}
 }
 
-// handleKeyEvent processes keyboard input based on current game mode
 func handleKeyEvent(gameState *game.Game, ev *tcell.EventKey) {
 	switch gameState.InputMode {
 	case game.InputModeDropping:
@@ -325,17 +426,17 @@ func handleKeyEvent(gameState *game.Game, ev *tcell.EventKey) {
 		handleDropMenuKey(gameState, ev)
 	case game.InputModeInventory:
 		handleInventoryKey(gameState, ev)
+	case game.InputModeCrafting:
+		handleCraftingKey(gameState, ev)
 	default:
 		handleNormalModeKey(gameState, ev)
 	}
 }
 
-// handleNormalModeKey processes input in normal gameplay mode
 func handleNormalModeKey(gameState *game.Game, ev *tcell.EventKey) {
 	action := ui.ParseAction(ev.Key(), ev.Rune())
 	dir := ui.ParseDirection(ev.Key(), ev.Rune())
 
-	// Handle item use with number keys
 	if action == ui.ActionUseItem {
 		slot, ok := ui.ParseSlotNumber(ev.Rune())
 		if ok {
@@ -347,48 +448,35 @@ func handleNormalModeKey(gameState *game.Game, ev *tcell.EventKey) {
 	gameState.HandleInput(action, dir)
 }
 
-// handleDropModeKey processes input while in drop mode (waiting for slot)
 func handleDropModeKey(gameState *game.Game, ev *tcell.EventKey) {
-	r := ev.Rune()
-
-	// ESC cancels drop mode
 	if ev.Key() == tcell.KeyEscape {
 		gameState.InputMode = game.InputModeNormal
 		return
 	}
 
-	gameState.HandleDropModeInput(r)
+	gameState.HandleDropModeInput(ev.Rune())
 }
 
-// handleDropMenuKey processes input while drop menu is displayed
 func handleDropMenuKey(gameState *game.Game, ev *tcell.EventKey) {
-	// ESC closes menu
 	if ev.Key() == tcell.KeyEscape {
 		gameState.InputMode = game.InputModeNormal
 		return
 	}
 
-	// Number keys drop item
 	slot, ok := ui.ParseSlotNumber(ev.Rune())
 	if ok {
 		gameState.HandleDropModeInput(ev.Rune())
-		// HandleDropModeInput already sets mode to Normal after drop
 		return
 	}
-
-	// Enter does nothing without selection (could add cursor later)
 	_ = slot
 }
 
-// handleInventoryKey processes input while inventory is displayed
 func handleInventoryKey(gameState *game.Game, ev *tcell.EventKey) {
-	// ESC or i closes inventory
 	if ev.Key() == tcell.KeyEscape || ev.Rune() == 'i' || ev.Rune() == 'I' {
 		gameState.InputMode = game.InputModeNormal
 		return
 	}
 
-	// Number keys use item
 	slot, ok := ui.ParseSlotNumber(ev.Rune())
 	if ok {
 		gameState.UseItemInSlot(slot)
@@ -396,7 +484,41 @@ func handleInventoryKey(gameState *game.Game, ev *tcell.EventKey) {
 	}
 }
 
-// getHPStyle returns a style based on current HP percentage
+func handleCraftingKey(gameState *game.Game, ev *tcell.EventKey) {
+	recipes := gameState.GetAllRecipes()
+
+	switch ev.Key() {
+	case tcell.KeyEscape:
+		gameState.InputMode = game.InputModeNormal
+	case tcell.KeyUp:
+		if gameState.CraftingCursor > 0 {
+			gameState.CraftingCursor--
+		}
+	case tcell.KeyDown:
+		if gameState.CraftingCursor < len(recipes)-1 {
+			gameState.CraftingCursor++
+		}
+	case tcell.KeyEnter:
+		selectedRecipe := recipes[gameState.CraftingCursor]
+		gameState.CraftRecipe(selectedRecipe.Name)
+	}
+
+	if ev.Key() == tcell.KeyRune {
+		switch ev.Rune() {
+		case 'k', 'K':
+			if gameState.CraftingCursor > 0 {
+				gameState.CraftingCursor--
+			}
+		case 'j', 'J':
+			if gameState.CraftingCursor < len(recipes)-1 {
+				gameState.CraftingCursor++
+			}
+		case 'c', 'C':
+			gameState.InputMode = game.InputModeNormal
+		}
+	}
+}
+
 func getHPStyle(current, max int) tcell.Style {
 	percent := float64(current) / float64(max)
 	if percent > 0.6 {
@@ -407,7 +529,6 @@ func getHPStyle(current, max int) tcell.Style {
 	return tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed)
 }
 
-// drawGameOver draws the game over screen
 func drawGameOver(screen *ui.Screen, width, height int) {
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorRed).Bold(true)
 	titleStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
@@ -439,7 +560,6 @@ func drawGameOver(screen *ui.Screen, width, height int) {
 	}
 }
 
-// drawVictory draws the victory screen
 func drawVictory(screen *ui.Screen, width, height int, gameState *game.Game) {
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorGreen).Bold(true)
 	titleStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorYellow)
@@ -454,7 +574,7 @@ func drawVictory(screen *ui.Screen, width, height int, gameState *game.Game) {
 		"",
 		"You have slain the beast!",
 		"",
-		fmt.Sprintf("Final HP: %d/%d", gameState.Player.HP, gameState.Player.MaxHP),
+		fmt.Sprintf("Final HP: %d/%d", gameState.Player.HP, gameState.Player.EffectiveMaxHP()),
 		"",
 		"Press any key to exit...",
 	}
@@ -473,7 +593,6 @@ func drawVictory(screen *ui.Screen, width, height int, gameState *game.Game) {
 	}
 }
 
-// waitForKeyPress waits for any key press
 func waitForKeyPress(screen *ui.Screen) {
 	for {
 		ev := screen.PollEvent()

@@ -993,3 +993,278 @@ func TestGameDropEmptySlot(t *testing.T) {
 		t.Errorf("InputMode = %v, want InputModeNormal", testGame.InputMode)
 	}
 }
+
+func TestGameHasMaterialsSlice(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.Materials == nil {
+		t.Error("NewGame should initialize Materials slice")
+	}
+}
+
+func TestGameSpawnsMaterialOnMonsterDeath(t *testing.T) {
+	foundMaterialDrop := false
+
+	for seed := int64(1); seed <= 20; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		for _, monster := range testGame.Monsters {
+			if monster.IsBoss {
+				continue
+			}
+
+			monster.HP = 1
+			mx, my := monster.Position()
+			testGame.Player.SetPosition(mx-1, my)
+			testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+			if len(testGame.Materials) > 0 {
+				foundMaterialDrop = true
+				break
+			}
+		}
+
+		if foundMaterialDrop {
+			break
+		}
+	}
+
+	if !foundMaterialDrop {
+		t.Error("Killing monsters should sometimes spawn materials")
+	}
+}
+
+func TestGameBossGuaranteesRareMaterialDrop(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Fatal("Game should have a boss")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	hasRareMaterial := false
+	for _, mat := range testGame.Materials {
+		if mat.Type.IsRare() {
+			hasRareMaterial = true
+			break
+		}
+	}
+
+	if !hasRareMaterial {
+		t.Error("Killing boss should guarantee a rare material drop")
+	}
+}
+
+func TestGamePickupMaterial(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	px, py := testGame.Player.Position()
+	material := entity.NewMaterial(entity.MaterialScales, px+1, py)
+	testGame.Materials = append(testGame.Materials, material)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.Player.MaterialPouch.Count(entity.MaterialScales) != 1 {
+		t.Error("Walking over material should add it to pouch")
+	}
+
+	if len(testGame.Materials) != 0 {
+		t.Error("Picked up material should be removed from ground")
+	}
+}
+
+func TestGameGetMaterialAt(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	material := entity.NewMaterial(entity.MaterialClaws, 10, 10)
+	testGame.Materials = append(testGame.Materials, material)
+
+	found := testGame.GetMaterialAt(10, 10)
+	if found != material {
+		t.Error("GetMaterialAt should return material at position")
+	}
+
+	notFound := testGame.GetMaterialAt(5, 5)
+	if notFound != nil {
+		t.Error("GetMaterialAt should return nil when no material present")
+	}
+}
+
+func TestGameCraftingModeToggle(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.InputMode != InputModeNormal {
+		t.Error("Game should start in normal mode")
+	}
+
+	testGame.HandleInput(ui.ActionCraft, ui.DirNone)
+
+	if testGame.InputMode != InputModeCrafting {
+		t.Error("ActionCraft should switch to crafting mode")
+	}
+}
+
+func TestGameCraftingCursor(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.CraftingCursor != 0 {
+		t.Error("CraftingCursor should start at 0")
+	}
+}
+
+func TestGameCraftItem(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	testGame.Player.MaterialPouch.Add(entity.MaterialScales, 3)
+	testGame.Player.MaterialPouch.Add(entity.MaterialClaws, 2)
+
+	crafted := testGame.CraftRecipe("Iron Sword")
+
+	if !crafted {
+		t.Error("CraftRecipe should return true with sufficient materials")
+	}
+
+	if testGame.Player.EquippedWeapon == nil {
+		t.Error("Crafted weapon should be auto-equipped")
+	}
+
+	if testGame.Player.EquippedWeapon.Name != "Iron Sword" {
+		t.Errorf("Equipped weapon = %q, want \"Iron Sword\"", testGame.Player.EquippedWeapon.Name)
+	}
+
+	if testGame.Player.MaterialPouch.Count(entity.MaterialScales) != 0 {
+		t.Error("Crafting should consume materials")
+	}
+}
+
+func TestGameCraftItemInsufficientMaterials(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	testGame.Player.MaterialPouch.Add(entity.MaterialScales, 1)
+
+	crafted := testGame.CraftRecipe("Iron Sword")
+
+	if crafted {
+		t.Error("CraftRecipe should return false with insufficient materials")
+	}
+
+	if testGame.Player.EquippedWeapon != nil {
+		t.Error("No weapon should be equipped after failed craft")
+	}
+}
+
+func TestGameCraftReplacesEquipment(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	oldWeapon := entity.NewEquipment("Old Sword", entity.SlotWeapon, 1, 0, 0)
+	testGame.Player.Equip(oldWeapon)
+
+	testGame.Player.MaterialPouch.Add(entity.MaterialScales, 3)
+	testGame.Player.MaterialPouch.Add(entity.MaterialClaws, 2)
+
+	testGame.CraftRecipe("Iron Sword")
+
+	if testGame.Player.EquippedWeapon.Name != "Iron Sword" {
+		t.Error("New crafted weapon should replace old weapon")
+	}
+}
+
+func TestGameCombatUsesEffectiveAttack(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	weapon := entity.NewEquipment("Test Sword", entity.SlotWeapon, 5, 0, 0)
+	testGame.Player.Equip(weapon)
+
+	expectedAttack := entity.DefaultPlayerAttack + 5
+	if testGame.Player.EffectiveAttack() != expectedAttack {
+		t.Errorf("EffectiveAttack = %d, want %d", testGame.Player.EffectiveAttack(), expectedAttack)
+	}
+
+	var targetMonster *entity.Monster
+	for _, monster := range testGame.Monsters {
+		if !monster.IsBoss {
+			targetMonster = monster
+			break
+		}
+	}
+
+	if targetMonster == nil {
+		t.Skip("No regular monster found")
+	}
+
+	initialHP := targetMonster.HP
+	mx, my := targetMonster.Position()
+	testGame.Player.SetPosition(mx-1, my)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if !targetMonster.Dead {
+		actualDamage := initialHP - targetMonster.HP
+		if actualDamage != expectedAttack {
+			t.Errorf("Damage dealt = %d, want %d (effective ATK)", actualDamage, expectedAttack)
+		}
+	}
+}
+
+func TestGameCombatUsesEffectiveDefense(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	armor := entity.NewEquipment("Test Armor", entity.SlotArmor, 0, 3, 0)
+	testGame.Player.Equip(armor)
+
+	expectedDefense := entity.DefaultPlayerDefense + 3
+	if testGame.Player.EffectiveDefense() != expectedDefense {
+		t.Errorf("EffectiveDefense = %d, want %d", testGame.Player.EffectiveDefense(), expectedDefense)
+	}
+}
+
+func TestGameVisibleMonsters(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	visibleMonsters := testGame.GetVisibleMonsters()
+
+	for _, monster := range visibleMonsters {
+		mx, my := monster.Position()
+		if !testGame.IsVisible(mx, my) {
+			t.Errorf("GetVisibleMonsters returned monster at (%d,%d) which is not visible", mx, my)
+		}
+	}
+}
+
+func TestGameVisibleMonstersExcludesBoss(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	visibleMonsters := testGame.GetVisibleMonsters()
+
+	for _, monster := range visibleMonsters {
+		if monster.IsBoss {
+			t.Error("GetVisibleMonsters should not include boss (boss shown separately in HUD)")
+		}
+	}
+}
+
+func TestGameVisibleMonstersLimit(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	visibleMonsters := testGame.GetVisibleMonsters()
+
+	if len(visibleMonsters) > 4 {
+		t.Errorf("GetVisibleMonsters should return at most 4, got %d", len(visibleMonsters))
+	}
+}
+
+func TestGameGetAllRecipes(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	recipes := testGame.GetAllRecipes()
+
+	if len(recipes) == 0 {
+		t.Error("GetAllRecipes should return at least one recipe")
+	}
+}

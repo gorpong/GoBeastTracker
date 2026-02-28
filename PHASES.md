@@ -218,19 +218,52 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 9: Monster Drops & Crafting ⏳
+## Phase 9: Monster Drops & Crafting ✅
 
 **Goal**: Material drops and equipment crafting
 
 ### Tasks
 
-- [ ] Monsters drop materials on death (scales, claws, etc.)
-- [ ] Boss drops unique rare material
-- [ ] Create `craft/crafting.go` - recipe system
-- [ ] Crafting menu UI (select recipe, craft item)
-- [ ] Equipment types: Weapon (+ATK), Armor (+DEF), Charm (+SPD)
-- [ ] Equipment affects player stats
-- [ ] Write tests for crafting logic
+- [x] Create `entity/material.go` - MaterialType enum and Material struct
+- [x] Create `entity/material.go` - MaterialPouch for unlimited material storage
+- [x] Define 4 common materials (Scales, Claws, Fangs, Hide)
+- [x] Define 5 rare materials (one per boss type)
+- [x] Create `entity/equipment.go` - Equipment struct with stat bonuses
+- [x] Define 3 equipment slots (Weapon, Armor, Charm)
+- [x] Add DropTable to Monster struct
+- [x] Regular monsters: 50% chance to drop 0-1 common material
+- [x] Boss monsters: guaranteed rare drop + common materials
+- [x] Add MaterialPouch and equipment slots to Player
+- [x] Add EffectiveAttack(), EffectiveDefense(), EffectiveMaxHP() to Player
+- [x] Combat uses effective stats (equipment bonuses apply)
+- [x] Create `craft/crafting.go` - Recipe system
+- [x] Define 5 basic recipes (common materials only)
+- [x] Define 5 boss recipes (require rare materials)
+- [x] Crafting menu ('c' key) with recipe browser
+- [x] Auto-equip crafted items (replace existing)
+- [x] Material pickup on walk-over (auto-add to pouch)
+- [x] Materials render on map (common: orange, rare: gold)
+- [x] Material pouch display in HUD
+- [x] Visible monster HP display in HUD (up to 4 nearby monsters)
+- [x] Write tests for all new functionality
+
+### Recipes Implemented
+
+**Basic (Common Materials):**
+
+- Iron Sword: 3 Scales, 2 Claws → +3 ATK
+- Bone Knife: 2 Fangs, 1 Scales → +2 ATK
+- Leather Armor: 4 Hide, 1 Fangs → +2 DEF, +10 MaxHP
+- Hide Vest: 3 Hide → +1 DEF, +5 MaxHP
+- Hunter's Charm: 2 Fangs, 2 Claws → +1 ATK, +1 DEF
+
+**Boss (Require Rare Materials):**
+
+- Wyvern Blade: 1 Wyvern Scale, 3 Scales → +6 ATK
+- Ogre Armor: 1 Ogre Hide, 4 Hide → +5 DEF, +25 MaxHP
+- Troll Gauntlets: 1 Troll Claw, 2 Claws → +4 ATK, +1 DEF
+- Cyclops Monocle: 1 Cyclops Eye, 2 Fangs → +2 ATK, +2 DEF
+- Minotaur Horn Helm: 1 Minotaur Horn, 3 Hide → +3 DEF, +15 MaxHP
 
 **Deliverable**: Hunt → materials → craft → stronger equipment.
 
@@ -290,6 +323,7 @@ All tasks completed in Phase 2.
 - [ ] Track hunt number and display progress
 - [ ] Create meta-progression screen (equipment, hunt history)
 - [ ] Write tests for difficulty scaling
+- [ ] **Future consideration**: Tiered equipment (Basic → Advanced → Master) with more varied recipes for deeper progression
 
 **Deliverable**: Multi-hunt campaign with escalating challenge.
 

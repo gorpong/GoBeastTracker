@@ -15,7 +15,7 @@ with a **Monster Hunter–inspired gameplay loop**, designed to be **playable an
 
 * The game is about **hunting specific monsters**, not clearing endless floors.
 * Each dungeon run has:
-  * One **primary target monster** (a “hunt”).
+  * One **primary target monster** (a "hunt").
   * Optional smaller monsters.
   * Limited healing/resources.
 * The player wins by **tracking down and defeating the target monster**, not by grinding.
@@ -103,7 +103,7 @@ Implement these fully and cleanly:
 
 * Build iteratively.
 * Each step should result in a **runnable game**.
-* Favor “working and fun” over “perfect.”
+* Favor "working and fun" over "perfect."
 * When tradeoffs exist, choose the simpler solution.
 * Use test-driven development to create tests for each separate component with appropriate mocking as necessary.
 
@@ -143,7 +143,7 @@ The goal is **polished, playable terminal roguelike with a clear Monster Hunter-
 
 ---
 
-## Lessons Learned (Phases 0-7)
+## Lessons Learned (Phases 0-9)
 
 ### User Preferences
 
@@ -167,11 +167,27 @@ The goal is **polished, playable terminal roguelike with a clear Monster Hunter-
 * WASD uses 'd' for right movement - don't reuse for drop
 * Solution: Use 'x' for drop mode instead
 
+### Phase 9 Lessons
+
+#### File Creation Planning
+
+* Plan complete file contents before presenting to user
+* Do not create a file and then immediately provide updates to it
+* Include all imports, all test cases, and all helper functions in initial presentation
+* If uncertain about completeness, state assumptions and ask before presenting
+
+
+#### Test Integration
+
+* When adding tests to existing test files, verify the tests compile and run before claiming completion
+* Ensure imports are complete (e.g., don't forget `entity` import when using `entity.MaterialType`)
+* Test game state changes through the game's public interface, not by directly manipulating internals when possible
+
 ### Proper Markdown Fencing
 
 When interacting with the user and providing them with a Markdown response that
-might include the contents of a Markdown file, it is imporatnt to properly nest
-the markdown fencing.  Beginning from the innermost markdown fenced block (e.g.,
+might include the contents of a Markdown file, it is important to properly nest
+the markdown fencing. Beginning from the innermost markdown fenced block (e.g.,
 a text, or python, or go fenced block) begin the count at 3 and increase the count
 until you get to the outermost layer -- your response. If you were providing a
 response to the user that included providing them with an INSTRUCTIONS.md file
@@ -180,7 +196,7 @@ response with 5 markdown fence characters (`````markdown) and when you get to th
 part of your response that includes the INSTRUCTIONS.md file you would use 4
 markdown fence characters to introduce it (````markdown), and then within the
 text block inside of the INSTRUCTIONS.md file you would use the traditional 3
-markdown fence characters to introdce it (```text). If you are not properly
+markdown fence characters to introduce it (```text). If you are not properly
 calculating the deepest levels your output will be garbled to the user and
 unusable.
 
@@ -190,31 +206,47 @@ unusable.
 
 ```text
 internal/
-  ├── dungeon/      # Tile-based map generation, rooms, corridors
-  ├── entity/       # Player and Monster structs with combat stats
-  ├── fov/          # Shadowcasting field of view
-  ├── game/         # Game state, combat logic, AI updates
-  └── ui/           # Input parsing, screen abstraction
-main.go             # Rendering loop, HUD, victory/game over screens
+  ├── craft/          # Recipe system and crafting logic
+  ├── dungeon/        # Tile-based map generation, rooms, corridors
+  ├── entity/         # Player, Monster, Item, Material, Equipment, Inventory
+  ├── fov/            # Shadowcasting field of view
+  ├── game/           # Game state, combat logic, AI updates
+  └── ui/             # Input parsing, screen abstraction
+main.go               # Rendering loop, HUD, menus, victory/game over screens
 ```
 
 #### Key Design Decisions
 
 1. **Game State Enum**: Use `GameStateType` (StatePlaying, StateGameOver, StateVictory) for clear state transitions
-2. **Message System**: Keep last 5 messages in a slice, display most recent in HUD
-3. **Combat Flow**:
+2. **Input Mode Enum**: Use `InputMode` (Normal, Dropping, DropMenu, Inventory, Crafting) for context-sensitive input
+3. **Message System**: Keep last 5 messages in a slice, display most recent in HUD
+4. **Combat Flow**:
    * Player attacks on movement into monster (bump-to-attack)
    * Monsters attack during AI update when adjacent to player
    * **CRITICAL**: Must call attack function when adjacent, not just skip movement
-4. **Boss Design**:
+   * Combat uses EffectiveAttack/EffectiveDefense (includes equipment bonuses)
+5. **Boss Design**:
    * Single `IsBoss` boolean field on Monster struct
    * Spawn in last room (furthest from player)
    * 5-7x HP of regular monsters
    * Different visual style (purple vs red)
-5. **FOV Integration**:
+   * Guaranteed rare material drop
+6. **FOV Integration**:
    * Compute on game start and after each player movement
    * Separate "visible" vs "explored" tracking
    * Hide monsters outside FOV, render explored tiles dimly
+7. **Material System**:
+   * Separate MaterialPouch (unlimited) from Inventory (6 slots for consumables)
+   * Common materials: lowercase glyphs, orange color
+   * Rare materials: uppercase glyphs (boss initial), gold color
+8. **Equipment System**:
+   * Three slots: Weapon, Armor, Charm
+   * Auto-equip on craft (replaces existing)
+   * Stats calculated via EffectiveAttack/Defense/MaxHP methods
+9. **Crafting System**:
+   * 'c' key opens menu with recipe browser
+   * Recipes check MaterialPouch for ingredients
+   * Green = craftable, gray = insufficient materials
 
 #### Testing Patterns
 
@@ -223,6 +255,7 @@ main.go             # Rendering loop, HUD, victory/game over screens
 * Set monster HP to 1 for one-hit kill tests
 * Use `CheckPlayerDeath()` explicitly in tests to trigger game state changes
 * Mock map implements interface with `GetWidth()`, `GetHeight()`, `IsTransparent()`
+* For random mechanics, loop through multiple seeds and fail only if ALL fail
 
 #### Common Pitfalls to Avoid
 
@@ -232,6 +265,7 @@ main.go             # Rendering loop, HUD, victory/game over screens
 4. **Commit Messages**: Can combine related phases in one commit with clear sections
 5. **Existing Tests**: When adding new key bindings or changing behavior, review existing tests in the same file first. Update test expectations before running tests to avoid false failures.
 6. **Package-level declarations**: Before adding constants, types, or functions to a package, check existing files in that package for declarations to avoid redeclaration errors.
+7. **File completeness**: Present complete files on first creation; don't create then immediately update.
 
 #### Effective TDD Workflow
 
@@ -243,11 +277,13 @@ main.go             # Rendering loop, HUD, victory/game over screens
 
 #### UI/Rendering Learnings
 
-* Reserve 2 rows at top for HUD (title, stats, boss info)
+* Reserve 3 rows at top for HUD (title/HP, stats/monsters, inventory/materials)
 * Reserve 2 rows at bottom (messages, instructions)
 * Color-code HP: green (>60%), yellow (>30%), red (≤30%)
 * Boss in purple (`tcell.ColorPurple`), regular monsters in red
+* Materials: common in orange, rare in gold
 * ASCII art for game over and victory screens adds polish
+* Context-sensitive instructions update based on InputMode
 
 ### Phase Development Velocity
 
@@ -257,14 +293,15 @@ main.go             # Rendering loop, HUD, victory/game over screens
 * **Phase 5**: FOV system (moderate pace, complex algorithm)
 * **Phase 6-7**: Combat + Boss (fast when combined, ~90 minutes)
 * **Bug Fix**: Monster attack implementation (15 minutes)
+* **Phase 8**: Items and inventory (~60 minutes)
+* **Phase 9**: Materials, equipment, crafting (~90 minutes, most complex phase)
 
 ### Future Phase Considerations
 
-* **Phase 8** (Items): Will need inventory UI, item struct, pickup/use mechanics
-* **Phase 9** (Crafting): Material drops on monster death, crafting menu, equipment system
 * **Phase 10** (Enhanced AI): Chase behavior when player visible, boss special attacks
-* **Scoring** (Phase 11): Points system, leaderboard JSON persistence
-* **Save/Load** (Phase 14): Game state serialization - consider early if user wants to pause development
+* **Phase 11** (Scoring): Points system, leaderboard JSON persistence
+* **Phase 12** (Hunt Progression): Equipment persistence, difficulty scaling, tiered equipment consideration
+* **Phase 14** (Save/Load): Game state serialization - consider early if user wants to pause development
 
 ### Development Flow Preferences
 

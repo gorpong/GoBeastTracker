@@ -3,8 +3,10 @@ package game
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"time"
 
+	"beasttracker/internal/craft"
 	"beasttracker/internal/dungeon"
 	"beasttracker/internal/entity"
 	"beasttracker/internal/fov"
@@ -12,13 +14,13 @@ import (
 )
 
 const (
-	monstersPerRoom = 2
-	playerFOVRadius = 8
-	maxMessages     = 5
-	maxItemsPerRoom = 2
+	monstersPerRoom    = 2
+	playerFOVRadius    = 8
+	maxMessages        = 5
+	maxItemsPerRoom    = 2
+	maxVisibleMonsters = 4
 )
 
-// GameStateType represents the current state of the game
 type GameStateType int
 
 const (
@@ -27,33 +29,33 @@ const (
 	StateVictory
 )
 
-// InputMode represents the current input context
 type InputMode int
 
 const (
-	InputModeNormal    InputMode = iota
-	InputModeDropping            // Waiting for slot number or menu trigger
-	InputModeDropMenu            // Showing drop menu
-	InputModeInventory           // Showing inventory (future use)
+	InputModeNormal InputMode = iota
+	InputModeDropping
+	InputModeDropMenu
+	InputModeInventory
+	InputModeCrafting
 )
 
-// Game holds all game state
 type Game struct {
-	Width     int
-	Height    int
-	Player    *entity.Player
-	Dungeon   *dungeon.Dungeon
-	Monsters  []*entity.Monster
-	Items     []*entity.Item
-	FOV       *fov.FOVMap
-	Running   bool
-	Seed      int64
-	GameState GameStateType
-	Messages  []string
-	InputMode InputMode
+	Width          int
+	Height         int
+	Player         *entity.Player
+	Dungeon        *dungeon.Dungeon
+	Monsters       []*entity.Monster
+	Items          []*entity.Item
+	Materials      []*entity.Material
+	FOV            *fov.FOVMap
+	Running        bool
+	Seed           int64
+	GameState      GameStateType
+	Messages       []string
+	InputMode      InputMode
+	CraftingCursor int
 }
 
-// NewGame creates a new game with the specified dimensions and RNG seed
 func NewGame(width, height int, seed int64) *Game {
 	rng := rand.New(rand.NewSource(seed))
 
@@ -68,18 +70,20 @@ func NewGame(width, height int, seed int64) *Game {
 	}
 
 	newGame := &Game{
-		Width:     width,
-		Height:    height,
-		Player:    entity.NewPlayer(playerX, playerY),
-		Dungeon:   generatedDungeon,
-		Monsters:  make([]*entity.Monster, 0),
-		Items:     make([]*entity.Item, 0),
-		FOV:       fov.NewFOVMap(width, height),
-		Running:   true,
-		Seed:      seed,
-		GameState: StatePlaying,
-		Messages:  make([]string, 0),
-		InputMode: InputModeNormal,
+		Width:          width,
+		Height:         height,
+		Player:         entity.NewPlayer(playerX, playerY),
+		Dungeon:        generatedDungeon,
+		Monsters:       make([]*entity.Monster, 0),
+		Items:          make([]*entity.Item, 0),
+		Materials:      make([]*entity.Material, 0),
+		FOV:            fov.NewFOVMap(width, height),
+		Running:        true,
+		Seed:           seed,
+		GameState:      StatePlaying,
+		Messages:       make([]string, 0),
+		InputMode:      InputModeNormal,
+		CraftingCursor: 0,
 	}
 
 	newGame.spawnMonsters(rng)
@@ -90,25 +94,20 @@ func NewGame(width, height int, seed int64) *Game {
 	return newGame
 }
 
-// ComputeFOV calculates the field of view from the player's current position
 func (g *Game) ComputeFOV() {
 	px, py := g.Player.Position()
 	fov.Compute(g.FOV, g.Dungeon, px, py, playerFOVRadius)
 }
 
-// IsVisible returns true if the tile at (x, y) is currently visible to the player
 func (g *Game) IsVisible(x, y int) bool {
 	return g.FOV.IsVisible(x, y)
 }
 
-// IsExplored returns true if the tile at (x, y) has been explored by the player
 func (g *Game) IsExplored(x, y int) bool {
 	return g.FOV.IsExplored(x, y)
 }
 
-// spawnMonsters populates the dungeon with monsters
 func (g *Game) spawnMonsters(rng *rand.Rand) {
-	// Define monster types
 	monsterTypes := []struct {
 		name   string
 		glyph  rune
@@ -121,7 +120,6 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 		{"Bat", 'b', 10, 2},
 	}
 
-	// Skip first room (player starts there)
 	startRoom := 1
 	if len(g.Dungeon.Rooms) <= 1 {
 		startRoom = 0
@@ -129,16 +127,12 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 
 	for i := startRoom; i < len(g.Dungeon.Rooms); i++ {
 		room := g.Dungeon.Rooms[i]
-
-		// Spawn 1-3 monsters per room
 		numMonsters := rng.Intn(3) + 1
 
 		for j := 0; j < numMonsters; j++ {
-			// Pick random position in room
 			x := room.X + rng.Intn(room.Width)
 			y := room.Y + rng.Intn(room.Height)
 
-			// Ensure position is walkable and not occupied
 			if !g.Dungeon.IsWalkable(x, y) {
 				continue
 			}
@@ -151,15 +145,14 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 				continue
 			}
 
-			// Pick random monster type
 			mType := monsterTypes[rng.Intn(len(monsterTypes))]
 			monster := entity.NewMonster(mType.name, mType.glyph, x, y, mType.hp, mType.attack)
+			monster.DropTable = entity.GetRegularMonsterDropTable()
 			g.Monsters = append(g.Monsters, monster)
 		}
 	}
 }
 
-// GetMonsterAt returns the monster at the specified position, or nil
 func (g *Game) GetMonsterAt(x, y int) *entity.Monster {
 	for _, monster := range g.Monsters {
 		if !monster.Dead {
@@ -172,7 +165,6 @@ func (g *Game) GetMonsterAt(x, y int) *entity.Monster {
 	return nil
 }
 
-// GetBoss returns the boss monster, or nil if none exists
 func (g *Game) GetBoss() *entity.Monster {
 	for _, monster := range g.Monsters {
 		if monster.IsBoss {
@@ -182,13 +174,11 @@ func (g *Game) GetBoss() *entity.Monster {
 	return nil
 }
 
-// spawnBoss spawns a boss monster in the last (furthest) room
 func (g *Game) spawnBoss(rng *rand.Rand) {
 	if len(g.Dungeon.Rooms) < 2 {
-		return // Need at least 2 rooms
+		return
 	}
 
-	// Define boss types
 	bossTypes := []struct {
 		name   string
 		glyph  rune
@@ -202,20 +192,16 @@ func (g *Game) spawnBoss(rng *rand.Rand) {
 		{"Minotaur", 'M', 95, 12},
 	}
 
-	// Spawn in the last room (furthest from player)
 	lastRoom := g.Dungeon.Rooms[len(g.Dungeon.Rooms)-1]
 	cx, cy := lastRoom.Center()
 
-	// Pick a random boss type
 	bossType := bossTypes[rng.Intn(len(bossTypes))]
 	boss := entity.NewBossMonster(bossType.name, bossType.glyph, cx, cy, bossType.hp, bossType.attack)
+	boss.DropTable = entity.GetBossDropTable(bossType.name)
 	g.Monsters = append(g.Monsters, boss)
 }
 
-// spawnItems populates the dungeon with items
 func (g *Game) spawnItems(rng *rand.Rand) {
-	// Herbs are more common than potions to encourage exploration
-	// while keeping strong healing rare
 	itemTypes := []struct {
 		itemType entity.ItemType
 		weight   int
@@ -233,7 +219,6 @@ func (g *Game) spawnItems(rng *rand.Rand) {
 		numItems := rng.Intn(maxItemsPerRoom + 1)
 
 		for j := 0; j < numItems; j++ {
-			// Limit attempts to avoid infinite loops in small or crowded rooms
 			for attempt := 0; attempt < 10; attempt++ {
 				x := room.X + rng.Intn(room.Width)
 				y := room.Y + rng.Intn(room.Height)
@@ -242,7 +227,6 @@ func (g *Game) spawnItems(rng *rand.Rand) {
 					continue
 				}
 
-				// Weighted random selection for item type
 				roll := rng.Intn(totalWeight)
 				var selectedType entity.ItemType
 				for _, it := range itemTypes {
@@ -261,7 +245,6 @@ func (g *Game) spawnItems(rng *rand.Rand) {
 	}
 }
 
-// isValidItemPosition ensures items don't block movement or stack
 func (g *Game) isValidItemPosition(x, y int) bool {
 	if !g.Dungeon.IsWalkable(x, y) {
 		return false
@@ -283,7 +266,6 @@ func (g *Game) isValidItemPosition(x, y int) bool {
 	return true
 }
 
-// GetItemAt returns the item at the specified position, or nil
 func (g *Game) GetItemAt(x, y int) *entity.Item {
 	for _, item := range g.Items {
 		ix, iy := item.Position()
@@ -294,7 +276,16 @@ func (g *Game) GetItemAt(x, y int) *entity.Item {
 	return nil
 }
 
-// RemoveItem removes an item from the game
+func (g *Game) GetMaterialAt(x, y int) *entity.Material {
+	for _, material := range g.Materials {
+		mx, my := material.Position()
+		if mx == x && my == y {
+			return material
+		}
+	}
+	return nil
+}
+
 func (g *Game) RemoveItem(item *entity.Item) {
 	for i, it := range g.Items {
 		if it == item {
@@ -304,7 +295,15 @@ func (g *Game) RemoveItem(item *entity.Item) {
 	}
 }
 
-// RemoveDeadMonsters removes all dead monsters from the game
+func (g *Game) RemoveMaterial(material *entity.Material) {
+	for i, mat := range g.Materials {
+		if mat == material {
+			g.Materials = append(g.Materials[:i], g.Materials[i+1:]...)
+			return
+		}
+	}
+}
+
 func (g *Game) RemoveDeadMonsters() {
 	alive := make([]*entity.Monster, 0, len(g.Monsters))
 	for _, monster := range g.Monsters {
@@ -315,7 +314,6 @@ func (g *Game) RemoveDeadMonsters() {
 	g.Monsters = alive
 }
 
-// UpdateMonsterAI updates all monster AI behaviors
 func (g *Game) UpdateMonsterAI() {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -331,12 +329,10 @@ func (g *Game) UpdateMonsterAI() {
 	}
 }
 
-// updateWanderAI makes a monster wander randomly
 func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	px, py := g.Player.Position()
 	mx, my := monster.Position()
 
-	// Check if adjacent to player - if so, attack instead of moving
 	dx := px - mx
 	dy := py - my
 	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
@@ -344,12 +340,10 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 		return
 	}
 
-	// 50% chance to move on any given turn
 	if rng.Intn(2) == 0 {
 		return
 	}
 
-	// Pick a random direction
 	directions := []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight}
 	dir := directions[rng.Intn(len(directions))]
 
@@ -357,17 +351,14 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	newX := monster.X + ddx
 	newY := monster.Y + ddy
 
-	// Check if target position is valid
 	if !g.Dungeon.IsWalkable(newX, newY) {
 		return
 	}
 
-	// Don't move into player
 	if newX == px && newY == py {
 		return
 	}
 
-	// Don't move into another monster
 	if g.GetMonsterAt(newX, newY) != nil {
 		return
 	}
@@ -375,7 +366,6 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	monster.SetPosition(newX, newY)
 }
 
-// HandleInput processes player input and updates game state
 func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
 	switch action {
 	case ui.ActionQuit:
@@ -387,11 +377,12 @@ func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
 		g.InputMode = InputModeDropping
 	case ui.ActionInventory:
 		g.InputMode = InputModeInventory
+	case ui.ActionCraft:
+		g.InputMode = InputModeCrafting
+		g.CraftingCursor = 0
 	}
 }
 
-// tryMovePlayer attempts to move the player in the given direction.
-// Movement is blocked if it would hit a wall. If a monster is present, attack it.
 func (g *Game) tryMovePlayer(dir ui.Direction) {
 	dx, dy := dir.Delta()
 	newX := g.Player.X + dx
@@ -408,13 +399,12 @@ func (g *Game) tryMovePlayer(dir ui.Direction) {
 
 	g.Player.SetPosition(newX, newY)
 
-	// Check for item pickup after moving
 	g.tryPickupItem(newX, newY)
+	g.tryPickupMaterial(newX, newY)
 
 	g.ComputeFOV()
 }
 
-// tryPickupItem attempts to pick up an item at the given position
 func (g *Game) tryPickupItem(x, y int) {
 	item := g.GetItemAt(x, y)
 	if item == nil {
@@ -431,7 +421,17 @@ func (g *Game) tryPickupItem(x, y int) {
 	g.AddMessage(fmt.Sprintf("Picked up %s.", item.Name()))
 }
 
-// UseItemInSlot uses the item in the specified inventory slot (1-indexed)
+func (g *Game) tryPickupMaterial(x, y int) {
+	material := g.GetMaterialAt(x, y)
+	if material == nil {
+		return
+	}
+
+	g.Player.MaterialPouch.Add(material.Type, 1)
+	g.RemoveMaterial(material)
+	g.AddMessage(fmt.Sprintf("Picked up %s.", material.Name()))
+}
+
 func (g *Game) UseItemInSlot(slot int) {
 	item := g.Player.Inventory.GetSlot(slot)
 	if item == nil {
@@ -448,15 +448,12 @@ func (g *Game) UseItemInSlot(slot int) {
 	g.Player.Inventory.Remove(slot)
 }
 
-// HandleDropModeInput processes input while in drop mode
 func (g *Game) HandleDropModeInput(r rune) {
-	// Check for menu triggers
 	if r == 'x' || r == 'X' || r == 'i' || r == 'I' {
 		g.InputMode = InputModeDropMenu
 		return
 	}
 
-	// Check for slot number
 	slot, ok := ui.ParseSlotNumber(r)
 	if ok {
 		g.dropItemFromSlot(slot)
@@ -464,11 +461,9 @@ func (g *Game) HandleDropModeInput(r rune) {
 		return
 	}
 
-	// Any other key cancels drop mode
 	g.InputMode = InputModeNormal
 }
 
-// dropItemFromSlot drops an item from inventory to the ground at player position
 func (g *Game) dropItemFromSlot(slot int) {
 	item := g.Player.Inventory.GetSlot(slot)
 	if item == nil {
@@ -478,7 +473,6 @@ func (g *Game) dropItemFromSlot(slot int) {
 
 	g.Player.Inventory.Remove(slot)
 
-	// Place item at player's feet
 	px, py := g.Player.Position()
 	item.X = px
 	item.Y = py
@@ -487,30 +481,28 @@ func (g *Game) dropItemFromSlot(slot int) {
 	g.AddMessage(fmt.Sprintf("Dropped %s.", item.Name()))
 }
 
-// AddMessage adds a message to the message log
 func (g *Game) AddMessage(msg string) {
 	g.Messages = append(g.Messages, msg)
-	// Keep only the last maxMessages
 	if len(g.Messages) > maxMessages {
 		g.Messages = g.Messages[len(g.Messages)-maxMessages:]
 	}
 }
 
-// CalculateDamage calculates damage dealt based on attack and defense
 func (g *Game) CalculateDamage(attack, defense int) int {
 	damage := attack - defense
 	if damage < 1 {
-		damage = 1 // Minimum 1 damage
+		damage = 1
 	}
 	return damage
 }
 
-// playerAttack handles the player attacking a monster
 func (g *Game) playerAttack(monster *entity.Monster) {
-	damage := g.CalculateDamage(g.Player.Attack, 0) // Monsters have no defense for now
+	damage := g.CalculateDamage(g.Player.EffectiveAttack(), 0)
 	monster.TakeDamage(damage)
 
 	if monster.Dead {
+		g.spawnMonsterDrops(monster)
+
 		if monster.IsBoss {
 			g.AddMessage(fmt.Sprintf("You have slain the %s! VICTORY!", monster.Name))
 			g.GameState = StateVictory
@@ -523,9 +515,22 @@ func (g *Game) playerAttack(monster *entity.Monster) {
 	}
 }
 
-// monsterAttack handles a monster attacking the player
+func (g *Game) spawnMonsterDrops(monster *entity.Monster) {
+	if monster.DropTable == nil {
+		return
+	}
+
+	drops := monster.DropTable.GenerateDrops()
+	mx, my := monster.Position()
+
+	for _, materialType := range drops {
+		material := entity.NewMaterial(materialType, mx, my)
+		g.Materials = append(g.Materials, material)
+	}
+}
+
 func (g *Game) monsterAttack(monster *entity.Monster) {
-	damage := g.CalculateDamage(monster.Attack, g.Player.Defense)
+	damage := g.CalculateDamage(monster.Attack, g.Player.EffectiveDefense())
 	g.Player.TakeDamage(damage)
 
 	g.AddMessage(fmt.Sprintf("The %s hits you for %d damage!", monster.Name, damage))
@@ -536,9 +541,75 @@ func (g *Game) monsterAttack(monster *entity.Monster) {
 	}
 }
 
-// CheckPlayerDeath checks if the player is dead and updates game state
 func (g *Game) CheckPlayerDeath() {
 	if g.Player.Dead && g.GameState != StateGameOver {
 		g.GameState = StateGameOver
 	}
+}
+
+func (g *Game) GetVisibleMonsters() []*entity.Monster {
+	visible := make([]*entity.Monster, 0)
+
+	for _, monster := range g.Monsters {
+		if monster.Dead || monster.IsBoss {
+			continue
+		}
+
+		mx, my := monster.Position()
+		if g.IsVisible(mx, my) {
+			visible = append(visible, monster)
+		}
+	}
+
+	if len(visible) > maxVisibleMonsters {
+		px, py := g.Player.Position()
+		sort.Slice(visible, func(i, j int) bool {
+			mx1, my1 := visible[i].Position()
+			mx2, my2 := visible[j].Position()
+			dist1 := abs(mx1-px) + abs(my1-py)
+			dist2 := abs(mx2-px) + abs(my2-py)
+			return dist1 < dist2
+		})
+		visible = visible[:maxVisibleMonsters]
+	}
+
+	return visible
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func (g *Game) CraftRecipe(recipeName string) bool {
+	recipe := craft.GetRecipeByName(recipeName)
+	if recipe == nil {
+		g.AddMessage(fmt.Sprintf("Unknown recipe: %s", recipeName))
+		return false
+	}
+
+	if !recipe.CanCraft(g.Player.MaterialPouch) {
+		g.AddMessage("Not enough materials!")
+		return false
+	}
+
+	equipment, ok := recipe.Craft(g.Player.MaterialPouch)
+	if !ok {
+		return false
+	}
+
+	oldEquip := g.Player.Equip(equipment)
+	if oldEquip != nil {
+		g.AddMessage(fmt.Sprintf("Crafted %s! (Replaced %s)", equipment.Name, oldEquip.Name))
+	} else {
+		g.AddMessage(fmt.Sprintf("Crafted and equipped %s!", equipment.Name))
+	}
+
+	return true
+}
+
+func (g *Game) GetAllRecipes() []*craft.Recipe {
+	return craft.GetAllRecipes()
 }

@@ -189,3 +189,194 @@ func TestBossMonsterHigherStats(t *testing.T) {
 		t.Errorf("Boss Attack (%d) should be higher than regular (%d)", boss.Attack, regular.Attack)
 	}
 }
+
+// TestDropTableCreation verifies drop table creation
+func TestDropTableCreation(t *testing.T) {
+	dropTable := NewDropTable(
+		[]MaterialType{MaterialScales},
+		[]MaterialType{MaterialClaws, MaterialFangs},
+	)
+
+	if len(dropTable.Guaranteed) != 1 {
+		t.Errorf("DropTable Guaranteed length = %d, want 1", len(dropTable.Guaranteed))
+	}
+	if len(dropTable.Possible) != 2 {
+		t.Errorf("DropTable Possible length = %d, want 2", len(dropTable.Possible))
+	}
+}
+
+// TestDropTableGenerateDropsGuaranteed verifies guaranteed drops always occur
+func TestDropTableGenerateDropsGuaranteed(t *testing.T) {
+	dropTable := NewDropTable(
+		[]MaterialType{MaterialScales, MaterialClaws},
+		[]MaterialType{},
+	)
+
+	// Run multiple times to verify guaranteed drops
+	for i := 0; i < 10; i++ {
+		drops := dropTable.GenerateDrops()
+
+		if len(drops) != 2 {
+			t.Errorf("Iteration %d: drops length = %d, want 2 (guaranteed)", i, len(drops))
+		}
+
+		hasScales := false
+		hasClaws := false
+		for _, drop := range drops {
+			if drop == MaterialScales {
+				hasScales = true
+			}
+			if drop == MaterialClaws {
+				hasClaws = true
+			}
+		}
+
+		if !hasScales {
+			t.Errorf("Iteration %d: missing guaranteed Scales", i)
+		}
+		if !hasClaws {
+			t.Errorf("Iteration %d: missing guaranteed Claws", i)
+		}
+	}
+}
+
+// TestDropTableGenerateDropsPossible verifies possible drops are random
+func TestDropTableGenerateDropsPossible(t *testing.T) {
+	dropTable := NewDropTable(
+		[]MaterialType{},
+		[]MaterialType{MaterialFangs},
+	)
+
+	// Run many times - should get some drops and some empty
+	gotDrop := false
+	gotEmpty := false
+
+	for i := 0; i < 50; i++ {
+		drops := dropTable.GenerateDrops()
+		if len(drops) > 0 {
+			gotDrop = true
+		} else {
+			gotEmpty = true
+		}
+
+		if gotDrop && gotEmpty {
+			break
+		}
+	}
+
+	if !gotDrop {
+		t.Error("Possible drops should sometimes produce materials")
+	}
+	if !gotEmpty {
+		t.Error("Possible drops should sometimes be empty (50% chance)")
+	}
+}
+
+// TestMonsterDropTable verifies monsters have drop tables
+func TestMonsterDropTable(t *testing.T) {
+	monster := NewMonster("Goblin", 'g', 10, 10, 15, 3)
+
+	// Regular monster should have nil drop table by default
+	if monster.DropTable != nil {
+		t.Error("New monster should have nil DropTable by default")
+	}
+
+	// Set a drop table
+	dropTable := NewDropTable(
+		[]MaterialType{},
+		[]MaterialType{MaterialScales, MaterialClaws},
+	)
+	monster.DropTable = dropTable
+
+	if monster.DropTable == nil {
+		t.Error("Monster DropTable should be set after assignment")
+	}
+}
+
+// TestBossMonsterDropTable verifies boss drop tables include rare materials
+func TestBossMonsterDropTable(t *testing.T) {
+	boss := NewBossMonster("Wyvern", 'W', 10, 10, 100, 15)
+
+	// Set boss drop table with rare material
+	dropTable := NewDropTable(
+		[]MaterialType{MaterialWyvernScale},
+		[]MaterialType{MaterialScales, MaterialClaws},
+	)
+	boss.DropTable = dropTable
+
+	// Verify guaranteed rare drop
+	hasRare := false
+	for _, mat := range boss.DropTable.Guaranteed {
+		if mat.IsRare() {
+			hasRare = true
+			break
+		}
+	}
+
+	if !hasRare {
+		t.Error("Boss drop table should include a guaranteed rare material")
+	}
+}
+
+// TestGetRegularMonsterDropTable verifies drop table assignment for regular monsters
+func TestGetRegularMonsterDropTable(t *testing.T) {
+	dropTable := GetRegularMonsterDropTable()
+
+	if dropTable == nil {
+		t.Fatal("GetRegularMonsterDropTable() returned nil")
+	}
+
+	// Regular monsters should not have guaranteed drops
+	if len(dropTable.Guaranteed) != 0 {
+		t.Errorf("Regular monster should have no guaranteed drops, got %d", len(dropTable.Guaranteed))
+	}
+
+	// Should have possible drops
+	if len(dropTable.Possible) == 0 {
+		t.Error("Regular monster should have possible drops")
+	}
+
+	// Should only have common materials
+	for _, mat := range dropTable.Possible {
+		if mat.IsRare() {
+			t.Errorf("Regular monster drop table should not include rare material: %s", mat.String())
+		}
+	}
+}
+
+// TestGetBossDropTable verifies drop table for specific boss types
+func TestGetBossDropTable(t *testing.T) {
+	tests := []struct {
+		bossName     string
+		expectedRare MaterialType
+	}{
+		{"Wyvern", MaterialWyvernScale},
+		{"Ogre", MaterialOgreHide},
+		{"Troll", MaterialTrollClaw},
+		{"Cyclops", MaterialCyclopsEye},
+		{"Minotaur", MaterialMinotaurHorn},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.bossName, func(t *testing.T) {
+			dropTable := GetBossDropTable(tt.bossName)
+
+			if dropTable == nil {
+				t.Fatalf("GetBossDropTable(%q) returned nil", tt.bossName)
+			}
+
+			// Should have guaranteed rare material
+			hasExpectedRare := false
+			for _, mat := range dropTable.Guaranteed {
+				if mat == tt.expectedRare {
+					hasExpectedRare = true
+					break
+				}
+			}
+
+			if !hasExpectedRare {
+				t.Errorf("Boss %s should guarantee %s drop", tt.bossName, tt.expectedRare.String())
+			}
+		})
+	}
+}

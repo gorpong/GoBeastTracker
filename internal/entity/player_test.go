@@ -231,3 +231,238 @@ func TestPlayerHasInventory(t *testing.T) {
 			player.Inventory.Capacity(), DefaultInventoryCapacity)
 	}
 }
+
+// TestPlayerMaterialPouch verifies player has material pouch
+func TestPlayerMaterialPouch(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.MaterialPouch == nil {
+		t.Error("NewPlayer should initialize MaterialPouch")
+	}
+	if player.MaterialPouch.TotalCount() != 0 {
+		t.Error("New player's MaterialPouch should be empty")
+	}
+}
+
+// TestPlayerEquipmentSlots verifies player has equipment slots
+func TestPlayerEquipmentSlots(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.EquippedWeapon != nil {
+		t.Error("New player should have no weapon equipped")
+	}
+	if player.EquippedArmor != nil {
+		t.Error("New player should have no armor equipped")
+	}
+	if player.EquippedCharm != nil {
+		t.Error("New player should have no charm equipped")
+	}
+}
+
+// TestPlayerEquipWeapon verifies equipping a weapon
+func TestPlayerEquipWeapon(t *testing.T) {
+	player := NewPlayer(0, 0)
+	weapon := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+
+	player.Equip(weapon)
+
+	if player.EquippedWeapon != weapon {
+		t.Error("Equip() should set EquippedWeapon for weapon slot")
+	}
+}
+
+// TestPlayerEquipArmor verifies equipping armor
+func TestPlayerEquipArmor(t *testing.T) {
+	player := NewPlayer(0, 0)
+	armor := NewEquipment("Leather Armor", SlotArmor, 0, 2, 10)
+
+	player.Equip(armor)
+
+	if player.EquippedArmor != armor {
+		t.Error("Equip() should set EquippedArmor for armor slot")
+	}
+}
+
+// TestPlayerEquipCharm verifies equipping a charm
+func TestPlayerEquipCharm(t *testing.T) {
+	player := NewPlayer(0, 0)
+	charm := NewEquipment("Hunter's Charm", SlotCharm, 1, 1, 0)
+
+	player.Equip(charm)
+
+	if player.EquippedCharm != charm {
+		t.Error("Equip() should set EquippedCharm for charm slot")
+	}
+}
+
+// TestPlayerEquipReplacesExisting verifies equipping replaces old equipment
+func TestPlayerEquipReplacesExisting(t *testing.T) {
+	player := NewPlayer(0, 0)
+	weapon1 := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	weapon2 := NewEquipment("Wyvern Blade", SlotWeapon, 6, 0, 0)
+
+	player.Equip(weapon1)
+	oldWeapon := player.Equip(weapon2)
+
+	if player.EquippedWeapon != weapon2 {
+		t.Error("Equip() should replace existing weapon")
+	}
+	if oldWeapon != weapon1 {
+		t.Error("Equip() should return the replaced equipment")
+	}
+}
+
+// TestPlayerUnequip verifies removing equipment
+func TestPlayerUnequip(t *testing.T) {
+	player := NewPlayer(0, 0)
+	weapon := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	player.Equip(weapon)
+
+	removed := player.Unequip(SlotWeapon)
+
+	if player.EquippedWeapon != nil {
+		t.Error("Unequip() should clear the equipment slot")
+	}
+	if removed != weapon {
+		t.Error("Unequip() should return the removed equipment")
+	}
+}
+
+// TestPlayerUnequipEmpty verifies unequipping empty slot
+func TestPlayerUnequipEmpty(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	removed := player.Unequip(SlotWeapon)
+
+	if removed != nil {
+		t.Error("Unequip() on empty slot should return nil")
+	}
+}
+
+// TestPlayerEffectiveAttackNoEquipment verifies base ATK without equipment
+func TestPlayerEffectiveAttackNoEquipment(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.EffectiveAttack() != DefaultPlayerAttack {
+		t.Errorf("EffectiveAttack() without equipment = %d, want %d",
+			player.EffectiveAttack(), DefaultPlayerAttack)
+	}
+}
+
+// TestPlayerEffectiveAttackWithWeapon verifies ATK with weapon equipped
+func TestPlayerEffectiveAttackWithWeapon(t *testing.T) {
+	player := NewPlayer(0, 0)
+	weapon := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	player.Equip(weapon)
+
+	expected := DefaultPlayerAttack + 3
+	if player.EffectiveAttack() != expected {
+		t.Errorf("EffectiveAttack() with weapon = %d, want %d",
+			player.EffectiveAttack(), expected)
+	}
+}
+
+// TestPlayerEffectiveAttackWithCharm verifies ATK includes charm bonus
+func TestPlayerEffectiveAttackWithCharm(t *testing.T) {
+	player := NewPlayer(0, 0)
+	charm := NewEquipment("Attack Charm", SlotCharm, 2, 0, 0)
+	player.Equip(charm)
+
+	expected := DefaultPlayerAttack + 2
+	if player.EffectiveAttack() != expected {
+		t.Errorf("EffectiveAttack() with charm = %d, want %d",
+			player.EffectiveAttack(), expected)
+	}
+}
+
+// TestPlayerEffectiveAttackCombined verifies ATK sums all equipment
+func TestPlayerEffectiveAttackCombined(t *testing.T) {
+	player := NewPlayer(0, 0)
+	weapon := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	charm := NewEquipment("Attack Charm", SlotCharm, 2, 0, 0)
+	player.Equip(weapon)
+	player.Equip(charm)
+
+	expected := DefaultPlayerAttack + 3 + 2
+	if player.EffectiveAttack() != expected {
+		t.Errorf("EffectiveAttack() combined = %d, want %d",
+			player.EffectiveAttack(), expected)
+	}
+}
+
+// TestPlayerEffectiveDefenseNoEquipment verifies base DEF without equipment
+func TestPlayerEffectiveDefenseNoEquipment(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.EffectiveDefense() != DefaultPlayerDefense {
+		t.Errorf("EffectiveDefense() without equipment = %d, want %d",
+			player.EffectiveDefense(), DefaultPlayerDefense)
+	}
+}
+
+// TestPlayerEffectiveDefenseWithArmor verifies DEF with armor equipped
+func TestPlayerEffectiveDefenseWithArmor(t *testing.T) {
+	player := NewPlayer(0, 0)
+	armor := NewEquipment("Leather Armor", SlotArmor, 0, 2, 0)
+	player.Equip(armor)
+
+	expected := DefaultPlayerDefense + 2
+	if player.EffectiveDefense() != expected {
+		t.Errorf("EffectiveDefense() with armor = %d, want %d",
+			player.EffectiveDefense(), expected)
+	}
+}
+
+// TestPlayerEffectiveDefenseCombined verifies DEF sums all equipment
+func TestPlayerEffectiveDefenseCombined(t *testing.T) {
+	player := NewPlayer(0, 0)
+	armor := NewEquipment("Leather Armor", SlotArmor, 0, 2, 0)
+	charm := NewEquipment("Defense Charm", SlotCharm, 0, 1, 0)
+	player.Equip(armor)
+	player.Equip(charm)
+
+	expected := DefaultPlayerDefense + 2 + 1
+	if player.EffectiveDefense() != expected {
+		t.Errorf("EffectiveDefense() combined = %d, want %d",
+			player.EffectiveDefense(), expected)
+	}
+}
+
+// TestPlayerEffectiveMaxHPNoEquipment verifies base MaxHP without equipment
+func TestPlayerEffectiveMaxHPNoEquipment(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.EffectiveMaxHP() != DefaultPlayerHP {
+		t.Errorf("EffectiveMaxHP() without equipment = %d, want %d",
+			player.EffectiveMaxHP(), DefaultPlayerHP)
+	}
+}
+
+// TestPlayerEffectiveMaxHPWithArmor verifies MaxHP with armor equipped
+func TestPlayerEffectiveMaxHPWithArmor(t *testing.T) {
+	player := NewPlayer(0, 0)
+	armor := NewEquipment("Leather Armor", SlotArmor, 0, 0, 10)
+	player.Equip(armor)
+
+	expected := DefaultPlayerHP + 10
+	if player.EffectiveMaxHP() != expected {
+		t.Errorf("EffectiveMaxHP() with armor = %d, want %d",
+			player.EffectiveMaxHP(), expected)
+	}
+}
+
+// TestPlayerHealRespectsEffectiveMaxHP verifies heal respects equipment bonus
+func TestPlayerHealRespectsEffectiveMaxHP(t *testing.T) {
+	player := NewPlayer(0, 0)
+	armor := NewEquipment("Leather Armor", SlotArmor, 0, 0, 20)
+	player.Equip(armor)
+	player.TakeDamage(50)
+
+	// Heal should respect effective max HP (100 + 20 = 120)
+	player.Heal(100)
+
+	expectedMaxHP := DefaultPlayerHP + 20
+	if player.HP != expectedMaxHP {
+		t.Errorf("After Heal with armor bonus: HP = %d, want %d", player.HP, expectedMaxHP)
+	}
+}
