@@ -466,3 +466,120 @@ func TestPlayerHealRespectsEffectiveMaxHP(t *testing.T) {
 		t.Errorf("After Heal with armor bonus: HP = %d, want %d", player.HP, expectedMaxHP)
 	}
 }
+
+func TestPlayerHasEquipmentStash(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if player.EquipmentStash == nil {
+		t.Error("NewPlayer should initialize EquipmentStash")
+	}
+
+	if player.EquipmentStash.Count() != 0 {
+		t.Error("New player's EquipmentStash should be empty")
+	}
+}
+
+func TestPlayerEquipFromStash(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	sword := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	player.EquipmentStash.Add(sword)
+
+	player.EquipFromStash(sword)
+
+	if player.EquippedWeapon != sword {
+		t.Error("EquipFromStash should equip the item")
+	}
+
+	if player.EquipmentStash.Contains(sword) {
+		t.Error("Equipped item should be removed from stash")
+	}
+}
+
+func TestPlayerEquipFromStashReturnsOldToStash(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	oldSword := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	newSword := NewEquipment("Wyvern Blade", SlotWeapon, 6, 0, 0)
+
+	player.Equip(oldSword)
+	player.EquipmentStash.Add(newSword)
+
+	player.EquipFromStash(newSword)
+
+	if player.EquippedWeapon != newSword {
+		t.Error("New weapon should be equipped")
+	}
+
+	if !player.EquipmentStash.Contains(oldSword) {
+		t.Error("Old weapon should be returned to stash")
+	}
+
+	if player.EquipmentStash.Contains(newSword) {
+		t.Error("New weapon should not be in stash after equipping")
+	}
+}
+
+func TestPlayerUnequipToStash(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	sword := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+	player.Equip(sword)
+
+	player.UnequipToStash(SlotWeapon)
+
+	if player.EquippedWeapon != nil {
+		t.Error("Weapon slot should be empty after unequip")
+	}
+
+	if !player.EquipmentStash.Contains(sword) {
+		t.Error("Unequipped weapon should be in stash")
+	}
+}
+
+func TestPlayerUnequipToStashEmptySlot(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	// Should not panic on empty slot
+	player.UnequipToStash(SlotWeapon)
+
+	if player.EquipmentStash.Count() != 0 {
+		t.Error("Stash should remain empty when unequipping empty slot")
+	}
+}
+
+func TestPlayerEquipFromStashNotInStash(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	sword := NewEquipment("Iron Sword", SlotWeapon, 3, 0, 0)
+
+	// Equipment not in stash - should not equip
+	result := player.EquipFromStash(sword)
+
+	if result {
+		t.Error("EquipFromStash should return false for item not in stash")
+	}
+
+	if player.EquippedWeapon != nil {
+		t.Error("Should not equip item that wasn't in stash")
+	}
+}
+
+func TestPlayerGetAllEquippedItems(t *testing.T) {
+	player := NewPlayer(0, 0)
+
+	if len(player.GetAllEquipped()) != 0 {
+		t.Error("New player should have no equipped items")
+	}
+
+	weapon := NewEquipment("Sword", SlotWeapon, 3, 0, 0)
+	armor := NewEquipment("Armor", SlotArmor, 0, 2, 10)
+
+	player.Equip(weapon)
+	player.Equip(armor)
+
+	equipped := player.GetAllEquipped()
+	if len(equipped) != 2 {
+		t.Errorf("Should have 2 equipped items, got %d", len(equipped))
+	}
+}

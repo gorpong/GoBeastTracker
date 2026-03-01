@@ -251,3 +251,128 @@ func TestActionCraftString(t *testing.T) {
 		t.Errorf("ActionCraft.String() = %q, want \"Craft\"", ActionCraft.String())
 	}
 }
+
+func TestParseActionEquipment(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'e')
+
+	if action != ActionEquipment {
+		t.Errorf("ParseAction for 'e' = %v, want ActionEquipment", action)
+	}
+}
+
+func TestParseActionEquipmentUppercase(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'E')
+
+	if action != ActionEquipment {
+		t.Errorf("ParseAction for 'E' = %v, want ActionEquipment", action)
+	}
+}
+
+func TestActionEquipmentString(t *testing.T) {
+	if ActionEquipment.String() != "Equipment" {
+		t.Errorf("ActionEquipment.String() = %q, want \"Equipment\"", ActionEquipment.String())
+	}
+}
+
+func TestParseActionRestart(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'r')
+
+	if action != ActionRestart {
+		t.Errorf("ParseAction for 'r' = %v, want ActionRestart", action)
+	}
+}
+
+func TestParseActionRestartUppercase(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'R')
+
+	if action != ActionRestart {
+		t.Errorf("ParseAction for 'R' = %v, want ActionRestart", action)
+	}
+}
+
+func TestActionRestartString(t *testing.T) {
+	if ActionRestart.String() != "Restart" {
+		t.Errorf("ActionRestart.String() = %q, want \"Restart\"", ActionRestart.String())
+	}
+}
+
+func TestParseActionNextHunt(t *testing.T) {
+	action := ParseAction(tcell.KeyRune, 'n')
+
+	if action != ActionNextHunt {
+		t.Errorf("ParseAction for 'n' = %v, want ActionNextHunt", action)
+	}
+}
+
+func TestActionNextHuntString(t *testing.T) {
+	if ActionNextHunt.String() != "NextHunt" {
+		t.Errorf("ActionNextHunt.String() = %q, want \"NextHunt\"", ActionNextHunt.String())
+	}
+}
+
+func TestParseActionBackspace(t *testing.T) {
+	action := ParseAction(tcell.KeyBackspace, 0)
+
+	if action != ActionBackspace {
+		t.Errorf("ParseAction for Backspace = %v, want ActionBackspace", action)
+	}
+}
+
+func TestParseActionBackspace2(t *testing.T) {
+	action := ParseAction(tcell.KeyBackspace2, 0)
+
+	if action != ActionBackspace {
+		t.Errorf("ParseAction for Backspace2 = %v, want ActionBackspace", action)
+	}
+}
+
+func TestActionBackspaceString(t *testing.T) {
+	if ActionBackspace.String() != "Backspace" {
+		t.Errorf("ActionBackspace.String() = %q, want \"Backspace\"", ActionBackspace.String())
+	}
+}
+
+func TestIsLetter(t *testing.T) {
+	tests := []struct {
+		r    rune
+		want bool
+	}{
+		{'A', true},
+		{'Z', true},
+		{'a', true},
+		{'z', true},
+		{'M', true},
+		{'1', false},
+		{'!', false},
+		{' ', false},
+		{'@', false},
+	}
+
+	for _, tc := range tests {
+		got := IsLetter(tc.r)
+		if got != tc.want {
+			t.Errorf("IsLetter(%q) = %v, want %v", tc.r, got, tc.want)
+		}
+	}
+}
+
+func TestToUpper(t *testing.T) {
+	tests := []struct {
+		r    rune
+		want rune
+	}{
+		{'a', 'A'},
+		{'z', 'Z'},
+		{'m', 'M'},
+		{'A', 'A'},
+		{'Z', 'Z'},
+		{'1', '1'},
+	}
+
+	for _, tc := range tests {
+		got := ToUpper(tc.r)
+		if got != tc.want {
+			t.Errorf("ToUpper(%q) = %q, want %q", tc.r, got, tc.want)
+		}
+	}
+}

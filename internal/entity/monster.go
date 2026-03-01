@@ -12,9 +12,9 @@ type AIType int
 const (
 	AIWander AIType = iota
 	AIChase
-	AIAggressive // Always chases, attacks twice
-	AIDefensive  // Retreats when low HP
-	AIFleeing    // Runs away from player
+	AIAggressive
+	AIDefensive
+	AIFleeing
 )
 
 func (a AIType) String() string {
@@ -37,10 +37,10 @@ func (a AIType) String() string {
 type BossBehavior int
 
 const (
-	BossNormal     BossBehavior = iota
-	BossAggressive              // Double damage when below 50% HP
-	BossTeleport                // Can teleport near player
-	BossSummoner                // Spawns minions
+	BossNormal BossBehavior = iota
+	BossAggressive
+	BossTeleport
+	BossSummoner
 )
 
 func (b BossBehavior) String() string {
@@ -148,7 +148,6 @@ func (m *Monster) IsAlive() bool {
 	return !m.Dead
 }
 
-// GetChaseDirection returns the direction to move toward the target position
 func (m *Monster) GetChaseDirection(targetX, targetY int) ui.Direction {
 	dx := targetX - m.X
 	dy := targetY - m.Y
@@ -157,7 +156,6 @@ func (m *Monster) GetChaseDirection(targetX, targetY int) ui.Direction {
 		return ui.DirNone
 	}
 
-	// Horizontal wins ties
 	if abs(dx) >= abs(dy) && dx != 0 {
 		if dx > 0 {
 			return ui.DirRight
@@ -175,7 +173,6 @@ func (m *Monster) GetChaseDirection(targetX, targetY int) ui.Direction {
 	return ui.DirNone
 }
 
-// GetFleeDirection returns the direction to move away from the target position
 func (m *Monster) GetFleeDirection(targetX, targetY int) ui.Direction {
 	dx := targetX - m.X
 	dy := targetY - m.Y
@@ -184,7 +181,6 @@ func (m *Monster) GetFleeDirection(targetX, targetY int) ui.Direction {
 		return ui.DirNone
 	}
 
-	// Move opposite to chase direction
 	if abs(dx) >= abs(dy) && dx != 0 {
 		if dx > 0 {
 			return ui.DirLeft
@@ -202,27 +198,22 @@ func (m *Monster) GetFleeDirection(targetX, targetY int) ui.Direction {
 	return ui.DirNone
 }
 
-// IsLowHP returns true if monster is below 30% HP
 func (m *Monster) IsLowHP() bool {
 	return float64(m.HP)/float64(m.MaxHP) < 0.3
 }
 
-// IsEnraged returns true if boss is below 50% HP (for aggressive behavior)
 func (m *Monster) IsEnraged() bool {
 	return float64(m.HP)/float64(m.MaxHP) < 0.5
 }
 
-// CanTeleport returns true if teleport is off cooldown
 func (m *Monster) CanTeleport() bool {
 	return m.BossBehavior == BossTeleport && m.TeleportCooldown == 0
 }
 
-// CanSummon returns true if summon is off cooldown
 func (m *Monster) CanSummon() bool {
 	return m.BossBehavior == BossSummoner && m.SummonCooldown == 0
 }
 
-// TickCooldowns reduces cooldown timers by 1
 func (m *Monster) TickCooldowns() {
 	if m.TeleportCooldown > 0 {
 		m.TeleportCooldown--
@@ -232,7 +223,6 @@ func (m *Monster) TickCooldowns() {
 	}
 }
 
-// GetEffectiveAttack returns attack value, doubled if enraged aggressive boss
 func (m *Monster) GetEffectiveAttack() int {
 	if m.IsBoss && m.BossBehavior == BossAggressive && m.IsEnraged() {
 		return m.Attack * 2
@@ -247,40 +237,97 @@ func abs(x int) int {
 	return x
 }
 
+// DropTable defines what materials a monster can drop on death
 type DropTable struct {
-	Guaranteed []MaterialType
-	Possible   []MaterialType
+	// For regular monsters: chance to drop anything at all
+	DropChance float64
+	// For bosses: guaranteed rare material (zero value means none)
+	GuaranteedRare MaterialType
+	// Whether there's a guaranteed drop
+	HasGuaranteed bool
+	// Possible common materials to drop
+	PossibleDrops []MaterialType
+	// For bosses: chance to get bonus common drops
+	BonusChance float64
+	// Maximum bonus drops
+	MaxBonusDrops int
 }
 
+// NewDropTable creates a drop table for regular monsters (legacy compatibility)
 func NewDropTable(guaranteed, possible []MaterialType) *DropTable {
-	return &DropTable{
-		Guaranteed: guaranteed,
-		Possible:   possible,
+	dt := &DropTable{
+		DropChance:    0.30,
+		PossibleDrops: possible,
+		HasGuaranteed: len(guaranteed) > 0,
+		BonusChance:   0.0,
+		MaxBonusDrops: 0,
 	}
+	if len(guaranteed) > 0 {
+		dt.GuaranteedRare = guaranteed[0]
+	}
+	return dt
 }
 
+// GenerateDrops generates the actual drops based on the drop table
 func (dt *DropTable) GenerateDrops() []MaterialType {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	drops := make([]MaterialType, 0)
 
-	drops = append(drops, dt.Guaranteed...)
+	// Add guaranteed rare drop for bosses
+	if dt.HasGuaranteed {
+		drops = append(drops, dt.GuaranteedRare)
 
-	for _, matType := range dt.Possible {
-		if rng.Intn(2) == 0 {
-			drops = append(drops, matType)
+		// Boss bonus drops
+		if dt.BonusChance > 0 && rng.Float64() < dt.BonusChance {
+			numBonus := rng.Intn(dt.MaxBonusDrops) + 1
+			for i := 0; i < numBonus; i++ {
+				if len(dt.PossibleDrops) > 0 {
+					randomMat := dt.PossibleDrops[rng.Intn(len(dt.PossibleDrops))]
+					drops = append(drops, randomMat)
+				}
+			}
+		}
+		return drops
+	}
+
+	// Regular monster: DropChance to drop anything, then 1 random item
+	if rng.Float64() < dt.DropChance {
+		if len(dt.PossibleDrops) > 0 {
+			randomMat := dt.PossibleDrops[rng.Intn(len(dt.PossibleDrops))]
+			drops = append(drops, randomMat)
 		}
 	}
 
 	return drops
 }
 
-func GetRegularMonsterDropTable() *DropTable {
-	return NewDropTable(
-		[]MaterialType{},
-		GetCommonMaterialTypes(),
-	)
+// Guaranteed returns the guaranteed drops (for test compatibility)
+func (dt *DropTable) Guaranteed() []MaterialType {
+	if dt.HasGuaranteed {
+		return []MaterialType{dt.GuaranteedRare}
+	}
+	return []MaterialType{}
 }
 
+// Possible returns the possible drops (for test compatibility)
+func (dt *DropTable) Possible() []MaterialType {
+	return dt.PossibleDrops
+}
+
+// GetRegularMonsterDropTable returns the drop table for regular monsters
+// 30% chance to drop anything, then 1 random common material
+func GetRegularMonsterDropTable() *DropTable {
+	return &DropTable{
+		DropChance:    0.30,
+		HasGuaranteed: false,
+		PossibleDrops: GetCommonMaterialTypes(),
+		BonusChance:   0.0,
+		MaxBonusDrops: 0,
+	}
+}
+
+// GetBossDropTable returns the drop table for a specific boss type
+// 1 guaranteed rare + 50% chance for 1-2 commons
 func GetBossDropTable(bossName string) *DropTable {
 	var rareMaterial MaterialType
 
@@ -299,10 +346,14 @@ func GetBossDropTable(bossName string) *DropTable {
 		rareMaterial = MaterialWyvernScale
 	}
 
-	return NewDropTable(
-		[]MaterialType{rareMaterial},
-		GetCommonMaterialTypes(),
-	)
+	return &DropTable{
+		DropChance:     0.0, // Not used for bosses
+		GuaranteedRare: rareMaterial,
+		HasGuaranteed:  true,
+		PossibleDrops:  GetCommonMaterialTypes(),
+		BonusChance:    0.50,
+		MaxBonusDrops:  2,
+	}
 }
 
 // GetBossBehaviorForType returns the behavior associated with each boss type

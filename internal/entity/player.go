@@ -4,14 +4,12 @@ import (
 	"beasttracker/internal/ui"
 )
 
-// Default player stats
 const (
 	DefaultPlayerHP      = 100
 	DefaultPlayerAttack  = 10
 	DefaultPlayerDefense = 2
 )
 
-// Player represents the player character in the game
 type Player struct {
 	X              int
 	Y              int
@@ -23,12 +21,12 @@ type Player struct {
 	Dead           bool
 	Inventory      *Inventory
 	MaterialPouch  *MaterialPouch
+	EquipmentStash *EquipmentStash
 	EquippedWeapon *Equipment
 	EquippedArmor  *Equipment
 	EquippedCharm  *Equipment
 }
 
-// NewPlayer creates a new player at the specified position
 func NewPlayer(x, y int) *Player {
 	return &Player{
 		X:              x,
@@ -41,31 +39,28 @@ func NewPlayer(x, y int) *Player {
 		Dead:           false,
 		Inventory:      NewInventory(DefaultInventoryCapacity),
 		MaterialPouch:  NewMaterialPouch(),
+		EquipmentStash: NewEquipmentStash(),
 		EquippedWeapon: nil,
 		EquippedArmor:  nil,
 		EquippedCharm:  nil,
 	}
 }
 
-// Move moves the player in the specified direction
 func (p *Player) Move(dir ui.Direction) {
 	dx, dy := dir.Delta()
 	p.X += dx
 	p.Y += dy
 }
 
-// Position returns the player's current coordinates
 func (p *Player) Position() (int, int) {
 	return p.X, p.Y
 }
 
-// SetPosition sets the player's position to the specified coordinates
 func (p *Player) SetPosition(x, y int) {
 	p.X = x
 	p.Y = y
 }
 
-// TakeDamage reduces the player's HP by the specified amount
 func (p *Player) TakeDamage(damage int) {
 	p.HP -= damage
 	if p.HP <= 0 {
@@ -74,7 +69,6 @@ func (p *Player) TakeDamage(damage int) {
 	}
 }
 
-// Heal restores HP to the player, not exceeding EffectiveMaxHP
 func (p *Player) Heal(amount int) {
 	p.HP += amount
 	effectiveMax := p.EffectiveMaxHP()
@@ -83,13 +77,10 @@ func (p *Player) Heal(amount int) {
 	}
 }
 
-// IsAlive returns true if the player is still alive
 func (p *Player) IsAlive() bool {
 	return !p.Dead
 }
 
-// Equip equips the given equipment to the appropriate slot.
-// Returns the previously equipped item (if any) which was replaced.
 func (p *Player) Equip(equipment *Equipment) *Equipment {
 	var old *Equipment
 
@@ -108,8 +99,6 @@ func (p *Player) Equip(equipment *Equipment) *Equipment {
 	return old
 }
 
-// Unequip removes equipment from the specified slot.
-// Returns the removed equipment, or nil if slot was empty.
 func (p *Player) Unequip(slot EquipmentSlot) *Equipment {
 	var removed *Equipment
 
@@ -128,7 +117,48 @@ func (p *Player) Unequip(slot EquipmentSlot) *Equipment {
 	return removed
 }
 
-// EffectiveAttack returns the player's total attack including equipment bonuses
+// EquipFromStash equips an item from the stash, returning old item to stash
+// Returns false if the equipment is not in the stash
+func (p *Player) EquipFromStash(equipment *Equipment) bool {
+	if !p.EquipmentStash.Contains(equipment) {
+		return false
+	}
+
+	p.EquipmentStash.Remove(equipment)
+
+	old := p.Equip(equipment)
+	if old != nil {
+		p.EquipmentStash.Add(old)
+	}
+
+	return true
+}
+
+// UnequipToStash removes equipped item and places it in the stash
+func (p *Player) UnequipToStash(slot EquipmentSlot) {
+	removed := p.Unequip(slot)
+	if removed != nil {
+		p.EquipmentStash.Add(removed)
+	}
+}
+
+// GetAllEquipped returns all currently equipped items
+func (p *Player) GetAllEquipped() []*Equipment {
+	result := make([]*Equipment, 0, 3)
+
+	if p.EquippedWeapon != nil {
+		result = append(result, p.EquippedWeapon)
+	}
+	if p.EquippedArmor != nil {
+		result = append(result, p.EquippedArmor)
+	}
+	if p.EquippedCharm != nil {
+		result = append(result, p.EquippedCharm)
+	}
+
+	return result
+}
+
 func (p *Player) EffectiveAttack() int {
 	total := p.Attack
 
@@ -145,7 +175,6 @@ func (p *Player) EffectiveAttack() int {
 	return total
 }
 
-// EffectiveDefense returns the player's total defense including equipment bonuses
 func (p *Player) EffectiveDefense() int {
 	total := p.Defense
 
@@ -162,7 +191,6 @@ func (p *Player) EffectiveDefense() int {
 	return total
 }
 
-// EffectiveMaxHP returns the player's total max HP including equipment bonuses
 func (p *Player) EffectiveMaxHP() int {
 	total := p.MaxHP
 

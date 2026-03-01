@@ -10,6 +10,7 @@ import (
 	"beasttracker/internal/dungeon"
 	"beasttracker/internal/entity"
 	"beasttracker/internal/fov"
+	"beasttracker/internal/save"
 	"beasttracker/internal/score"
 	"beasttracker/internal/ui"
 )
@@ -38,25 +39,27 @@ const (
 	InputModeDropMenu
 	InputModeInventory
 	InputModeCrafting
+	InputModeEquipment
 )
 
 type Game struct {
-	Width          int
-	Height         int
-	Player         *entity.Player
-	Dungeon        *dungeon.Dungeon
-	Monsters       []*entity.Monster
-	Items          []*entity.Item
-	Materials      []*entity.Material
-	FOV            *fov.FOVMap
-	Running        bool
-	Seed           int64
-	GameState      GameStateType
-	Messages       []string
-	InputMode      InputMode
-	CraftingCursor int
-	Score          int
-	HuntNumber     int
+	Width           int
+	Height          int
+	Player          *entity.Player
+	Dungeon         *dungeon.Dungeon
+	Monsters        []*entity.Monster
+	Items           []*entity.Item
+	Materials       []*entity.Material
+	FOV             *fov.FOVMap
+	Running         bool
+	Seed            int64
+	GameState       GameStateType
+	Messages        []string
+	InputMode       InputMode
+	CraftingCursor  int
+	EquipmentCursor int
+	Score           int
+	HuntNumber      int
 }
 
 func NewGame(width, height int, seed int64) *Game {
@@ -83,27 +86,29 @@ func NewGameWithHunt(width, height int, seed int64, huntNumber int, previousPlay
 		player.EquippedArmor = previousPlayer.EquippedArmor
 		player.EquippedCharm = previousPlayer.EquippedCharm
 		player.MaterialPouch = previousPlayer.MaterialPouch
+		player.EquipmentStash = previousPlayer.EquipmentStash
 	} else {
 		player = entity.NewPlayer(playerX, playerY)
 	}
 
 	newGame := &Game{
-		Width:          width,
-		Height:         height,
-		Player:         player,
-		Dungeon:        generatedDungeon,
-		Monsters:       make([]*entity.Monster, 0),
-		Items:          make([]*entity.Item, 0),
-		Materials:      make([]*entity.Material, 0),
-		FOV:            fov.NewFOVMap(width, height),
-		Running:        true,
-		Seed:           seed,
-		GameState:      StatePlaying,
-		Messages:       make([]string, 0),
-		InputMode:      InputModeNormal,
-		CraftingCursor: 0,
-		Score:          0,
-		HuntNumber:     huntNumber,
+		Width:           width,
+		Height:          height,
+		Player:          player,
+		Dungeon:         generatedDungeon,
+		Monsters:        make([]*entity.Monster, 0),
+		Items:           make([]*entity.Item, 0),
+		Materials:       make([]*entity.Material, 0),
+		FOV:             fov.NewFOVMap(width, height),
+		Running:         true,
+		Seed:            seed,
+		GameState:       StatePlaying,
+		Messages:        make([]string, 0),
+		InputMode:       InputModeNormal,
+		CraftingCursor:  0,
+		EquipmentCursor: 0,
+		Score:           0,
+		HuntNumber:      huntNumber,
 	}
 
 	newGame.spawnMonsters(rng)
@@ -112,6 +117,87 @@ func NewGameWithHunt(width, height int, seed int64, huntNumber int, previousPlay
 	newGame.ComputeFOV()
 
 	return newGame
+}
+
+func NewGameFromCheckpoint(width, height int, seed int64, checkpoint *save.SaveData) *Game {
+	rng := rand.New(rand.NewSource(seed))
+
+	generatedDungeon := dungeon.GenerateDungeon(width, height, seed)
+
+	var playerX, playerY int
+	if len(generatedDungeon.Rooms) > 0 {
+		playerX, playerY = generatedDungeon.Rooms[0].Center()
+	} else {
+		playerX = width / 2
+		playerY = height / 2
+	}
+
+	player := entity.NewPlayer(playerX, playerY)
+
+	// Restore equipment
+	if checkpoint.EquippedWeapon != nil {
+		player.EquippedWeapon = checkpoint.EquippedWeapon
+	}
+	if checkpoint.EquippedArmor != nil {
+		player.EquippedArmor = checkpoint.EquippedArmor
+	}
+	if checkpoint.EquippedCharm != nil {
+		player.EquippedCharm = checkpoint.EquippedCharm
+	}
+
+	// Restore stash
+	for _, equip := range checkpoint.StashedEquipment {
+		player.EquipmentStash.Add(equip)
+	}
+
+	// Restore materials
+	for matType, count := range checkpoint.Materials {
+		player.MaterialPouch.Add(matType, count)
+	}
+
+	newGame := &Game{
+		Width:           width,
+		Height:          height,
+		Player:          player,
+		Dungeon:         generatedDungeon,
+		Monsters:        make([]*entity.Monster, 0),
+		Items:           make([]*entity.Item, 0),
+		Materials:       make([]*entity.Material, 0),
+		FOV:             fov.NewFOVMap(width, height),
+		Running:         true,
+		Seed:            seed,
+		GameState:       StatePlaying,
+		Messages:        make([]string, 0),
+		InputMode:       InputModeNormal,
+		CraftingCursor:  0,
+		EquipmentCursor: 0,
+		Score:           checkpoint.Score,
+		HuntNumber:      checkpoint.HuntNumber,
+	}
+
+	newGame.spawnMonsters(rng)
+	newGame.spawnBoss(rng)
+	newGame.spawnItems(rng)
+	newGame.ComputeFOV()
+
+	return newGame
+}
+
+// CreateCheckpoint creates save data from current game state
+func (g *Game) CreateCheckpoint() *save.SaveData {
+	checkpoint := save.NewSaveData("", g.HuntNumber, g.Score)
+
+	checkpoint.EquippedWeapon = g.Player.EquippedWeapon
+	checkpoint.EquippedArmor = g.Player.EquippedArmor
+	checkpoint.EquippedCharm = g.Player.EquippedCharm
+
+	checkpoint.StashedEquipment = g.Player.EquipmentStash.GetAll()
+
+	for _, matType := range g.Player.MaterialPouch.AllMaterials() {
+		checkpoint.Materials[matType] = g.Player.MaterialPouch.Count(matType)
+	}
+
+	return checkpoint
 }
 
 func (g *Game) getMonstersPerRoom() int {
@@ -209,7 +295,7 @@ func (g *Game) GetMonsterAt(x, y int) *entity.Monster {
 
 func (g *Game) GetBoss() *entity.Monster {
 	for _, monster := range g.Monsters {
-		if monster.IsBoss {
+		if monster.IsBoss && !monster.Dead {
 			return monster
 		}
 	}
@@ -393,11 +479,66 @@ func (g *Game) UpdateMonsterAI() {
 	}
 }
 
+func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.monsterAttack(monster)
+		return
+	}
+
+	if rng.Intn(2) == 0 {
+		return
+	}
+
+	directions := []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight}
+	dir := directions[rng.Intn(len(directions))]
+
+	ddx, ddy := dir.Delta()
+	newX := monster.X + ddx
+	newY := monster.Y + ddy
+
+	if !g.Dungeon.IsWalkable(newX, newY) {
+		return
+	}
+
+	if newX == px && newY == py {
+		return
+	}
+
+	if g.GetMonsterAt(newX, newY) != nil {
+		return
+	}
+
+	monster.SetPosition(newX, newY)
+}
+
+func (g *Game) updateChaseAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.monsterAttack(monster)
+		return
+	}
+
+	if !g.IsVisible(mx, my) {
+		g.updateWanderAI(monster, rng)
+		return
+	}
+
+	g.moveMonsterToward(monster, px, py)
+}
+
 func (g *Game) updateBossAI(boss *entity.Monster, rng *rand.Rand) {
 	px, py := g.Player.Position()
 	bx, by := boss.Position()
 
-	// Check for adjacency first
 	dx := px - bx
 	dy := py - by
 	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
@@ -405,7 +546,6 @@ func (g *Game) updateBossAI(boss *entity.Monster, rng *rand.Rand) {
 		return
 	}
 
-	// Handle special behaviors
 	switch boss.BossBehavior {
 	case entity.BossTeleport:
 		if boss.CanTeleport() && rng.Intn(4) == 0 {
@@ -424,7 +564,6 @@ func (g *Game) updateBossAI(boss *entity.Monster, rng *rand.Rand) {
 		}
 	}
 
-	// Default chase behavior
 	g.updateChaseAI(boss, rng)
 }
 
@@ -447,7 +586,6 @@ func (g *Game) bossAttack(boss *entity.Monster) {
 func (g *Game) tryBossTeleport(boss *entity.Monster, rng *rand.Rand) bool {
 	px, py := g.Player.Position()
 
-	// Find valid positions 2-4 tiles from player
 	var validPositions []position
 	for radius := 2; radius <= 4; radius++ {
 		for dx := -radius; dx <= radius; dx++ {
@@ -503,7 +641,6 @@ func (g *Game) tryBossSummon(boss *entity.Monster, rng *rand.Rand) bool {
 		{"Shade", 'h', 6, 3},
 	}
 
-	// Find valid spawn position adjacent to boss
 	var validPositions []position
 	for dx := -1; dx <= 1; dx++ {
 		for dy := -1; dy <= 1; dy++ {
@@ -539,18 +676,10 @@ func (g *Game) updateAggressiveAI(monster *entity.Monster, rng *rand.Rand) {
 	px, py := g.Player.Position()
 	mx, my := monster.Position()
 
-	// Always attack if adjacent
 	dx := px - mx
 	dy := py - my
 	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
 		g.monsterAttack(monster)
-		return
-	}
-
-	// Always chase (no wandering)
-	if !g.IsVisible(mx, my) {
-		// Even when not visible, aggressive monsters move toward last known position
-		g.moveMonsterToward(monster, px, py)
 		return
 	}
 
@@ -565,17 +694,14 @@ func (g *Game) updateDefensiveAI(monster *entity.Monster, rng *rand.Rand) {
 	dy := py - my
 	adjacent := (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0
 
-	// Retreat when low HP
 	if monster.IsLowHP() {
 		if adjacent {
-			// Attack then try to flee
 			g.monsterAttack(monster)
 		}
 		g.moveMonsterAway(monster, px, py)
 		return
 	}
 
-	// Normal chase behavior when healthy
 	if adjacent {
 		g.monsterAttack(monster)
 		return
@@ -592,7 +718,6 @@ func (g *Game) updateFleeingAI(monster *entity.Monster, rng *rand.Rand) {
 	px, py := g.Player.Position()
 	mx, my := monster.Position()
 
-	// Only attack if cornered (can't flee)
 	dx := px - mx
 	dy := py - my
 	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
@@ -602,7 +727,6 @@ func (g *Game) updateFleeingAI(monster *entity.Monster, rng *rand.Rand) {
 		return
 	}
 
-	// Always flee
 	g.moveMonsterAway(monster, px, py)
 }
 
@@ -648,20 +772,19 @@ func (g *Game) moveMonsterAway(monster *entity.Monster, targetX, targetY int) {
 	newX, newY := mx+ddx, my+ddy
 
 	if !g.Dungeon.IsWalkable(newX, newY) || g.GetMonsterAt(newX, newY) != nil {
-		// Try perpendicular directions
 		alternatives := g.getPerpendicularDirections(dir)
+		moved := false
 		for _, alt := range alternatives {
 			adx, ady := alt.Delta()
 			newX, newY = mx+adx, my+ady
 			if g.Dungeon.IsWalkable(newX, newY) && g.GetMonsterAt(newX, newY) == nil {
+				moved = true
 				break
 			}
-			newX, newY = mx, my
 		}
-	}
-
-	if newX == mx && newY == my {
-		return
+		if !moved {
+			return
+		}
 	}
 
 	px, py := g.Player.Position()
@@ -694,93 +817,6 @@ func (g *Game) getPerpendicularDirections(dir ui.Direction) []ui.Direction {
 	default:
 		return nil
 	}
-}
-
-func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
-	px, py := g.Player.Position()
-	mx, my := monster.Position()
-
-	dx := px - mx
-	dy := py - my
-	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
-		g.monsterAttack(monster)
-		return
-	}
-
-	if rng.Intn(2) == 0 {
-		return
-	}
-
-	directions := []ui.Direction{ui.DirUp, ui.DirDown, ui.DirLeft, ui.DirRight}
-	dir := directions[rng.Intn(len(directions))]
-
-	ddx, ddy := dir.Delta()
-	newX := monster.X + ddx
-	newY := monster.Y + ddy
-
-	if !g.Dungeon.IsWalkable(newX, newY) {
-		return
-	}
-
-	if newX == px && newY == py {
-		return
-	}
-
-	if g.GetMonsterAt(newX, newY) != nil {
-		return
-	}
-
-	monster.SetPosition(newX, newY)
-}
-
-func (g *Game) updateChaseAI(monster *entity.Monster, rng *rand.Rand) {
-	px, py := g.Player.Position()
-	mx, my := monster.Position()
-
-	dx := px - mx
-	dy := py - my
-	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
-		g.monsterAttack(monster)
-		return
-	}
-
-	if !g.IsVisible(mx, my) {
-		g.updateWanderAI(monster, rng)
-		return
-	}
-
-	dir := monster.GetChaseDirection(px, py)
-	if dir == ui.DirNone {
-		return
-	}
-
-	ddx, ddy := dir.Delta()
-	newX := mx + ddx
-	newY := my + ddy
-
-	if !g.Dungeon.IsWalkable(newX, newY) {
-		altDir := g.findAlternateChaseDirection(monster, px, py, dir)
-		if altDir == ui.DirNone {
-			return
-		}
-		ddx, ddy = altDir.Delta()
-		newX = mx + ddx
-		newY = my + ddy
-	}
-
-	if !g.Dungeon.IsWalkable(newX, newY) {
-		return
-	}
-
-	if newX == px && newY == py {
-		return
-	}
-
-	if g.GetMonsterAt(newX, newY) != nil {
-		return
-	}
-
-	monster.SetPosition(newX, newY)
 }
 
 func (g *Game) findAlternateChaseDirection(monster *entity.Monster, targetX, targetY int, blockedDir ui.Direction) ui.Direction {
@@ -818,9 +854,19 @@ func (g *Game) findAlternateChaseDirection(monster *entity.Monster, targetX, tar
 }
 
 func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
-	switch action {
-	case ui.ActionQuit:
+	// Allow quitting from any state
+	if action == ui.ActionQuit {
 		g.Running = false
+		return
+	}
+
+	// Game over blocks all input except quit
+	if g.GameState == StateGameOver {
+		return
+	}
+
+	// Victory state allows continued play
+	switch action {
 	case ui.ActionMove:
 		g.tryMovePlayer(dir)
 		g.UpdateMonsterAI()
@@ -831,6 +877,9 @@ func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
 	case ui.ActionCraft:
 		g.InputMode = InputModeCrafting
 		g.CraftingCursor = 0
+	case ui.ActionEquipment:
+		g.InputMode = InputModeEquipment
+		g.EquipmentCursor = 0
 	}
 }
 
@@ -950,7 +999,7 @@ func (g *Game) CalculateDamage(attack, defense int) int {
 }
 
 func (g *Game) playerAttack(monster *entity.Monster) {
-	damage := g.CalculateDamage(g.Player.EffectiveAttack(), 0)
+	damage := g.CalculateDamage(g.Player.EffectiveAttack(), monster.Defense)
 	monster.TakeDamage(damage)
 
 	if monster.Dead {
@@ -1141,7 +1190,8 @@ func (g *Game) CraftRecipe(recipeName string) bool {
 
 	oldEquip := g.Player.Equip(equipment)
 	if oldEquip != nil {
-		g.AddMessage(fmt.Sprintf("Crafted %s! (Replaced %s)", equipment.Name, oldEquip.Name))
+		g.Player.EquipmentStash.Add(oldEquip)
+		g.AddMessage(fmt.Sprintf("Crafted %s! (Old %s moved to stash)", equipment.Name, oldEquip.Name))
 	} else {
 		g.AddMessage(fmt.Sprintf("Crafted and equipped %s!", equipment.Name))
 	}
@@ -1151,4 +1201,37 @@ func (g *Game) CraftRecipe(recipeName string) bool {
 
 func (g *Game) GetAllRecipes() []*craft.Recipe {
 	return craft.GetAllRecipes()
+}
+
+// GetEquipmentList returns all equipment available for a slot (equipped + stashed)
+func (g *Game) GetEquipmentList(slot entity.EquipmentSlot) []*entity.Equipment {
+	result := make([]*entity.Equipment, 0)
+
+	// Add currently equipped item first
+	var equipped *entity.Equipment
+	switch slot {
+	case entity.SlotWeapon:
+		equipped = g.Player.EquippedWeapon
+	case entity.SlotArmor:
+		equipped = g.Player.EquippedArmor
+	case entity.SlotCharm:
+		equipped = g.Player.EquippedCharm
+	}
+
+	if equipped != nil {
+		result = append(result, equipped)
+	}
+
+	// Add stashed items
+	stashed := g.Player.EquipmentStash.GetBySlot(slot)
+	result = append(result, stashed...)
+
+	return result
+}
+
+// IsEquipped returns true if the equipment is currently equipped
+func (g *Game) IsEquipped(equipment *entity.Equipment) bool {
+	return equipment == g.Player.EquippedWeapon ||
+		equipment == g.Player.EquippedArmor ||
+		equipment == g.Player.EquippedCharm
 }

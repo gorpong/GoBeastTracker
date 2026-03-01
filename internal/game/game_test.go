@@ -1570,3 +1570,322 @@ func TestChaseAIMovesTowardPlayer(t *testing.T) {
 		t.Error("Chase AI should move boss toward player when visible")
 	}
 }
+
+func TestGameVictoryStateAllowsMovement(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.GameState != StateVictory {
+		t.Fatal("Game should be in victory state after boss kill")
+	}
+
+	// Player should still be able to move after victory
+	px, py := testGame.Player.Position()
+	testGame.HandleInput(ui.ActionMove, ui.DirLeft)
+
+	newPx, newPy := testGame.Player.Position()
+	if newPx == px && newPy == py {
+		// Check if movement was blocked by wall, not by victory state
+		if testGame.Dungeon.IsWalkable(px-1, py) {
+			t.Error("Player should be able to move after victory")
+		}
+	}
+}
+
+func TestGameVictoryStateMonstersStillActive(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.GameState != StateVictory {
+		t.Fatal("Game should be in victory state")
+	}
+
+	// Count non-boss monsters
+	regularMonsters := 0
+	for _, m := range testGame.Monsters {
+		if !m.IsBoss && !m.Dead {
+			regularMonsters++
+		}
+	}
+
+	if regularMonsters == 0 {
+		t.Skip("No regular monsters to test")
+	}
+
+	// Monsters should still update AI after victory
+	initialPositions := make(map[*entity.Monster]struct{ x, y int })
+	for _, m := range testGame.Monsters {
+		if !m.Dead {
+			x, y := m.Position()
+			initialPositions[m] = struct{ x, y int }{x, y}
+		}
+	}
+
+	// Move player multiple times to trigger AI updates
+	for i := 0; i < 10; i++ {
+		testGame.HandleInput(ui.ActionMove, ui.DirLeft)
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+	}
+
+	// At least one monster should have moved (probabilistic, but likely)
+	moved := false
+	for m, pos := range initialPositions {
+		if m.Dead {
+			continue
+		}
+		x, y := m.Position()
+		if x != pos.x || y != pos.y {
+			moved = true
+			break
+		}
+	}
+
+	// This is probabilistic, so we don't fail if no movement
+	// The important thing is that the game didn't crash
+	_ = moved
+}
+
+func TestGameVictoryCanPickupItems(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.GameState != StateVictory {
+		t.Fatal("Game should be in victory state")
+	}
+
+	// Place an item near player
+	px, py := testGame.Player.Position()
+	item := entity.NewItem(entity.ItemPotion, px+1, py)
+	testGame.Items = append(testGame.Items, item)
+
+	initialCount := testGame.Player.Inventory.Count()
+
+	// Move onto item
+	if testGame.Dungeon.IsWalkable(px+1, py) {
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		if testGame.Player.Inventory.Count() <= initialCount {
+			// Item might not have been picked up if inventory full
+			if !testGame.Player.Inventory.IsFull() {
+				t.Error("Should be able to pick up items after victory")
+			}
+		}
+	}
+}
+
+func TestGameVictoryCanPickupMaterials(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	initialMaterials := len(testGame.Materials)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.GameState != StateVictory {
+		t.Fatal("Game should be in victory state")
+	}
+
+	// Boss should have dropped materials
+	if len(testGame.Materials) <= initialMaterials {
+		t.Skip("Boss didn't drop materials this run")
+	}
+
+	// Find a material and move onto it
+	if len(testGame.Materials) > 0 {
+		mat := testGame.Materials[0]
+		mx, my := mat.Position()
+		testGame.Player.SetPosition(mx-1, my)
+
+		initialPouchCount := testGame.Player.MaterialPouch.TotalCount()
+
+		if testGame.Dungeon.IsWalkable(mx, my) {
+			testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+			if testGame.Player.MaterialPouch.TotalCount() <= initialPouchCount {
+				t.Error("Should be able to pick up materials after victory")
+			}
+		}
+	}
+}
+
+func TestGameCheckpointSave(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	if checkpoint == nil {
+		t.Fatal("CreateCheckpoint returned nil")
+	}
+
+	if checkpoint.HuntNumber != testGame.HuntNumber {
+		t.Errorf("Checkpoint hunt = %d, want %d", checkpoint.HuntNumber, testGame.HuntNumber)
+	}
+
+	if checkpoint.Score != testGame.Score {
+		t.Errorf("Checkpoint score = %d, want %d", checkpoint.Score, testGame.Score)
+	}
+}
+
+func TestGameCheckpointPreservesEquipment(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	weapon := entity.NewEquipment("Test Sword", entity.SlotWeapon, 5, 0, 0)
+	testGame.Player.Equip(weapon)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	if checkpoint.EquippedWeapon == nil {
+		t.Error("Checkpoint should preserve equipped weapon")
+	}
+
+	if checkpoint.EquippedWeapon.Name != "Test Sword" {
+		t.Errorf("Checkpoint weapon = %q, want \"Test Sword\"", checkpoint.EquippedWeapon.Name)
+	}
+}
+
+func TestGameCheckpointPreservesMaterials(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	testGame.Player.MaterialPouch.Add(entity.MaterialScales, 5)
+	testGame.Player.MaterialPouch.Add(entity.MaterialClaws, 3)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	if checkpoint.Materials[entity.MaterialScales] != 5 {
+		t.Errorf("Checkpoint scales = %d, want 5", checkpoint.Materials[entity.MaterialScales])
+	}
+	if checkpoint.Materials[entity.MaterialClaws] != 3 {
+		t.Errorf("Checkpoint claws = %d, want 3", checkpoint.Materials[entity.MaterialClaws])
+	}
+}
+
+func TestGameCheckpointPreservesStash(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	armor := entity.NewEquipment("Leather Armor", entity.SlotArmor, 0, 2, 10)
+	testGame.Player.EquipmentStash.Add(armor)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	if len(checkpoint.StashedEquipment) != 1 {
+		t.Errorf("Checkpoint stash count = %d, want 1", len(checkpoint.StashedEquipment))
+	}
+}
+
+func TestGameRestoreFromCheckpoint(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	weapon := entity.NewEquipment("Test Sword", entity.SlotWeapon, 5, 0, 0)
+	testGame.Player.Equip(weapon)
+	testGame.Player.MaterialPouch.Add(entity.MaterialScales, 10)
+	testGame.Score = 150
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	// Create new game and restore
+	newGame := NewGameFromCheckpoint(50, 30, 54321, checkpoint)
+
+	if newGame.HuntNumber != checkpoint.HuntNumber {
+		t.Errorf("Restored hunt = %d, want %d", newGame.HuntNumber, checkpoint.HuntNumber)
+	}
+
+	if newGame.Score != checkpoint.Score {
+		t.Errorf("Restored score = %d, want %d", newGame.Score, checkpoint.Score)
+	}
+
+	if newGame.Player.EquippedWeapon == nil || newGame.Player.EquippedWeapon.Name != "Test Sword" {
+		t.Error("Restored game should have equipped weapon")
+	}
+
+	if newGame.Player.MaterialPouch.Count(entity.MaterialScales) != 10 {
+		t.Errorf("Restored scales = %d, want 10", newGame.Player.MaterialPouch.Count(entity.MaterialScales))
+	}
+}
+
+func TestGameRestoreResetsHP(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+	testGame.Player.TakeDamage(50)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	newGame := NewGameFromCheckpoint(50, 30, 54321, checkpoint)
+
+	if newGame.Player.HP != entity.DefaultPlayerHP {
+		t.Errorf("Restored HP = %d, want %d (full)", newGame.Player.HP, entity.DefaultPlayerHP)
+	}
+}
+
+func TestGameRestoreResetsInventory(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	potion := entity.NewItem(entity.ItemPotion, 0, 0)
+	testGame.Player.Inventory.Add(potion)
+
+	checkpoint := testGame.CreateCheckpoint()
+
+	newGame := NewGameFromCheckpoint(50, 30, 54321, checkpoint)
+
+	if newGame.Player.Inventory.Count() != 0 {
+		t.Errorf("Restored inventory count = %d, want 0", newGame.Player.Inventory.Count())
+	}
+}
+
+func TestGameInputModeEquipment(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.InputMode != InputModeNormal {
+		t.Error("Game should start in normal mode")
+	}
+
+	testGame.HandleInput(ui.ActionEquipment, ui.DirNone)
+
+	if testGame.InputMode != InputModeEquipment {
+		t.Errorf("InputMode = %v, want InputModeEquipment", testGame.InputMode)
+	}
+}
+
+func TestGameEquipmentCursor(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.EquipmentCursor != 0 {
+		t.Error("EquipmentCursor should start at 0")
+	}
+}

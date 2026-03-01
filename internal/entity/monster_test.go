@@ -6,7 +6,6 @@ import (
 	"beasttracker/internal/ui"
 )
 
-// TestNewMonster verifies monster creation with correct initial values
 func TestNewMonster(t *testing.T) {
 	m := NewMonster("Goblin", 'g', 10, 10, 20, 3)
 
@@ -39,7 +38,6 @@ func TestNewMonster(t *testing.T) {
 	}
 }
 
-// TestMonsterPosition verifies Position() returns correct coordinates
 func TestMonsterPosition(t *testing.T) {
 	m := NewMonster("Rat", 'r', 5, 7, 10, 2)
 	x, y := m.Position()
@@ -49,7 +47,6 @@ func TestMonsterPosition(t *testing.T) {
 	}
 }
 
-// TestMonsterSetPosition verifies SetPosition correctly updates coordinates
 func TestMonsterSetPosition(t *testing.T) {
 	m := NewMonster("Spider", 's', 0, 0, 15, 2)
 	m.SetPosition(20, 30)
@@ -59,7 +56,6 @@ func TestMonsterSetPosition(t *testing.T) {
 	}
 }
 
-// TestMonsterMove verifies monster moves correctly
 func TestMonsterMove(t *testing.T) {
 	m := NewMonster("Bat", 'b', 10, 10, 8, 1)
 
@@ -74,7 +70,6 @@ func TestMonsterMove(t *testing.T) {
 	}
 }
 
-// TestMonsterTakeDamage verifies damage reduces HP
 func TestMonsterTakeDamage(t *testing.T) {
 	m := NewMonster("Orc", 'o', 0, 0, 30, 5)
 
@@ -87,7 +82,6 @@ func TestMonsterTakeDamage(t *testing.T) {
 	}
 }
 
-// TestMonsterDeath verifies monster dies when HP reaches 0
 func TestMonsterDeath(t *testing.T) {
 	m := NewMonster("Slime", 'S', 0, 0, 15, 2)
 
@@ -100,7 +94,6 @@ func TestMonsterDeath(t *testing.T) {
 	}
 }
 
-// TestMonsterOverkillDamage verifies HP doesn't go negative
 func TestMonsterOverkillDamage(t *testing.T) {
 	m := NewMonster("Zombie", 'Z', 0, 0, 10, 3)
 
@@ -116,7 +109,6 @@ func TestMonsterOverkillDamage(t *testing.T) {
 	}
 }
 
-// TestMonsterIsAlive verifies IsAlive() returns correct status
 func TestMonsterIsAlive(t *testing.T) {
 	m := NewMonster("Wolf", 'w', 0, 0, 25, 4)
 
@@ -130,7 +122,6 @@ func TestMonsterIsAlive(t *testing.T) {
 	}
 }
 
-// TestMonsterAIType verifies AI type setting
 func TestMonsterAIType(t *testing.T) {
 	m := NewMonster("Dragon", 'D', 0, 0, 100, 15)
 	m.AI = AIChase
@@ -140,7 +131,6 @@ func TestMonsterAIType(t *testing.T) {
 	}
 }
 
-// TestAITypeString verifies AI type string representation
 func TestAITypeString(t *testing.T) {
 	tests := []struct {
 		ai   AIType
@@ -148,6 +138,9 @@ func TestAITypeString(t *testing.T) {
 	}{
 		{AIWander, "Wander"},
 		{AIChase, "Chase"},
+		{AIAggressive, "Aggressive"},
+		{AIDefensive, "Defensive"},
+		{AIFleeing, "Fleeing"},
 	}
 
 	for _, tt := range tests {
@@ -159,7 +152,6 @@ func TestAITypeString(t *testing.T) {
 	}
 }
 
-// TestNewBossMonster verifies boss monster creation
 func TestNewBossMonster(t *testing.T) {
 	boss := NewBossMonster("Wyvern", 'W', 10, 10, 100, 15)
 
@@ -172,86 +164,75 @@ func TestNewBossMonster(t *testing.T) {
 	if boss.HP != 100 {
 		t.Errorf("Boss HP = %d, want 100", boss.HP)
 	}
+	if boss.AI != AIChase {
+		t.Errorf("Boss AI = %v, want AIChase", boss.AI)
+	}
 }
 
-// TestBossMonsterHigherStats verifies boss has higher stats than regular
 func TestBossMonsterHigherStats(t *testing.T) {
 	regular := NewMonster("Goblin", 'g', 0, 0, 15, 3)
 	boss := NewBossMonster("Wyvern", 'W', 0, 0, 100, 15)
 
-	// Boss should have significantly more HP
 	if boss.HP <= regular.HP*2 {
 		t.Errorf("Boss HP (%d) should be much higher than regular (%d)", boss.HP, regular.HP)
 	}
 
-	// Boss attack should be higher
 	if boss.Attack <= regular.Attack {
 		t.Errorf("Boss Attack (%d) should be higher than regular (%d)", boss.Attack, regular.Attack)
 	}
 }
 
-// TestDropTableCreation verifies drop table creation
 func TestDropTableCreation(t *testing.T) {
 	dropTable := NewDropTable(
 		[]MaterialType{MaterialScales},
 		[]MaterialType{MaterialClaws, MaterialFangs},
 	)
 
-	if len(dropTable.Guaranteed) != 1 {
-		t.Errorf("DropTable Guaranteed length = %d, want 1", len(dropTable.Guaranteed))
+	guaranteed := dropTable.Guaranteed()
+	if len(guaranteed) != 1 {
+		t.Errorf("DropTable Guaranteed length = %d, want 1", len(guaranteed))
 	}
-	if len(dropTable.Possible) != 2 {
-		t.Errorf("DropTable Possible length = %d, want 2", len(dropTable.Possible))
+
+	possible := dropTable.Possible()
+	if len(possible) != 2 {
+		t.Errorf("DropTable Possible length = %d, want 2", len(possible))
 	}
 }
 
-// TestDropTableGenerateDropsGuaranteed verifies guaranteed drops always occur
 func TestDropTableGenerateDropsGuaranteed(t *testing.T) {
 	dropTable := NewDropTable(
-		[]MaterialType{MaterialScales, MaterialClaws},
+		[]MaterialType{MaterialScales},
 		[]MaterialType{},
 	)
 
-	// Run multiple times to verify guaranteed drops
 	for i := 0; i < 10; i++ {
 		drops := dropTable.GenerateDrops()
 
-		if len(drops) != 2 {
-			t.Errorf("Iteration %d: drops length = %d, want 2 (guaranteed)", i, len(drops))
+		if len(drops) < 1 {
+			t.Errorf("Iteration %d: drops length = %d, want at least 1 (guaranteed)", i, len(drops))
 		}
 
 		hasScales := false
-		hasClaws := false
 		for _, drop := range drops {
 			if drop == MaterialScales {
 				hasScales = true
-			}
-			if drop == MaterialClaws {
-				hasClaws = true
 			}
 		}
 
 		if !hasScales {
 			t.Errorf("Iteration %d: missing guaranteed Scales", i)
 		}
-		if !hasClaws {
-			t.Errorf("Iteration %d: missing guaranteed Claws", i)
-		}
 	}
 }
 
-// TestDropTableGenerateDropsPossible verifies possible drops are random
 func TestDropTableGenerateDropsPossible(t *testing.T) {
-	dropTable := NewDropTable(
-		[]MaterialType{},
-		[]MaterialType{MaterialFangs},
-	)
+	// Regular monster drop table with 30% chance
+	dropTable := GetRegularMonsterDropTable()
 
-	// Run many times - should get some drops and some empty
 	gotDrop := false
 	gotEmpty := false
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 100; i++ {
 		drops := dropTable.GenerateDrops()
 		if len(drops) > 0 {
 			gotDrop = true
@@ -265,27 +246,21 @@ func TestDropTableGenerateDropsPossible(t *testing.T) {
 	}
 
 	if !gotDrop {
-		t.Error("Possible drops should sometimes produce materials")
+		t.Error("Regular monster drops should sometimes produce materials")
 	}
 	if !gotEmpty {
-		t.Error("Possible drops should sometimes be empty (50% chance)")
+		t.Error("Regular monster drops should sometimes be empty")
 	}
 }
 
-// TestMonsterDropTable verifies monsters have drop tables
 func TestMonsterDropTable(t *testing.T) {
 	monster := NewMonster("Goblin", 'g', 10, 10, 15, 3)
 
-	// Regular monster should have nil drop table by default
 	if monster.DropTable != nil {
 		t.Error("New monster should have nil DropTable by default")
 	}
 
-	// Set a drop table
-	dropTable := NewDropTable(
-		[]MaterialType{},
-		[]MaterialType{MaterialScales, MaterialClaws},
-	)
+	dropTable := GetRegularMonsterDropTable()
 	monster.DropTable = dropTable
 
 	if monster.DropTable == nil {
@@ -293,20 +268,13 @@ func TestMonsterDropTable(t *testing.T) {
 	}
 }
 
-// TestBossMonsterDropTable verifies boss drop tables include rare materials
 func TestBossMonsterDropTable(t *testing.T) {
 	boss := NewBossMonster("Wyvern", 'W', 10, 10, 100, 15)
+	boss.DropTable = GetBossDropTable("Wyvern")
 
-	// Set boss drop table with rare material
-	dropTable := NewDropTable(
-		[]MaterialType{MaterialWyvernScale},
-		[]MaterialType{MaterialScales, MaterialClaws},
-	)
-	boss.DropTable = dropTable
-
-	// Verify guaranteed rare drop
 	hasRare := false
-	for _, mat := range boss.DropTable.Guaranteed {
+	guaranteed := boss.DropTable.Guaranteed()
+	for _, mat := range guaranteed {
 		if mat.IsRare() {
 			hasRare = true
 			break
@@ -318,7 +286,6 @@ func TestBossMonsterDropTable(t *testing.T) {
 	}
 }
 
-// TestGetRegularMonsterDropTable verifies drop table assignment for regular monsters
 func TestGetRegularMonsterDropTable(t *testing.T) {
 	dropTable := GetRegularMonsterDropTable()
 
@@ -326,25 +293,23 @@ func TestGetRegularMonsterDropTable(t *testing.T) {
 		t.Fatal("GetRegularMonsterDropTable() returned nil")
 	}
 
-	// Regular monsters should not have guaranteed drops
-	if len(dropTable.Guaranteed) != 0 {
-		t.Errorf("Regular monster should have no guaranteed drops, got %d", len(dropTable.Guaranteed))
+	guaranteed := dropTable.Guaranteed()
+	if len(guaranteed) != 0 {
+		t.Errorf("Regular monster should have no guaranteed drops, got %d", len(guaranteed))
 	}
 
-	// Should have possible drops
-	if len(dropTable.Possible) == 0 {
+	possible := dropTable.Possible()
+	if len(possible) == 0 {
 		t.Error("Regular monster should have possible drops")
 	}
 
-	// Should only have common materials
-	for _, mat := range dropTable.Possible {
+	for _, mat := range possible {
 		if mat.IsRare() {
 			t.Errorf("Regular monster drop table should not include rare material: %s", mat.String())
 		}
 	}
 }
 
-// TestGetBossDropTable verifies drop table for specific boss types
 func TestGetBossDropTable(t *testing.T) {
 	tests := []struct {
 		bossName     string
@@ -365,9 +330,9 @@ func TestGetBossDropTable(t *testing.T) {
 				t.Fatalf("GetBossDropTable(%q) returned nil", tt.bossName)
 			}
 
-			// Should have guaranteed rare material
 			hasExpectedRare := false
-			for _, mat := range dropTable.Guaranteed {
+			guaranteed := dropTable.Guaranteed()
+			for _, mat := range guaranteed {
 				if mat == tt.expectedRare {
 					hasExpectedRare = true
 					break
@@ -400,7 +365,7 @@ func TestMonsterGetChaseDirection(t *testing.T) {
 		{2, 5, ui.DirLeft},
 		{5, 8, ui.DirDown},
 		{5, 2, ui.DirUp},
-		{8, 8, ui.DirRight}, // Diagonal equal, horizontal wins
+		{8, 8, ui.DirRight},
 		{8, 6, ui.DirRight},
 		{6, 8, ui.DirDown},
 		{5, 5, ui.DirNone},
@@ -422,10 +387,10 @@ func TestMonsterGetFleeDirection(t *testing.T) {
 		targetX, targetY int
 		wantDir          ui.Direction
 	}{
-		{8, 5, ui.DirLeft},  // Target right, flee left
-		{2, 5, ui.DirRight}, // Target left, flee right
-		{5, 8, ui.DirUp},    // Target below, flee up
-		{5, 2, ui.DirDown},  // Target above, flee down
+		{8, 5, ui.DirLeft},
+		{2, 5, ui.DirRight},
+		{5, 8, ui.DirUp},
+		{5, 2, ui.DirDown},
 		{5, 5, ui.DirNone},
 	}
 
@@ -556,25 +521,6 @@ func TestGetBossBehaviorForType(t *testing.T) {
 	}
 }
 
-func TestAITypeStrings(t *testing.T) {
-	tests := []struct {
-		ai   AIType
-		want string
-	}{
-		{AIWander, "Wander"},
-		{AIChase, "Chase"},
-		{AIAggressive, "Aggressive"},
-		{AIDefensive, "Defensive"},
-		{AIFleeing, "Fleeing"},
-	}
-
-	for _, tc := range tests {
-		if got := tc.ai.String(); got != tc.want {
-			t.Errorf("AIType(%d).String() = %q, want %q", tc.ai, got, tc.want)
-		}
-	}
-}
-
 func TestBossBehaviorStrings(t *testing.T) {
 	tests := []struct {
 		behavior BossBehavior
@@ -603,5 +549,80 @@ func TestMonsterDefense(t *testing.T) {
 
 	if boss.Defense != 2 {
 		t.Errorf("Boss defense = %d, want 2", boss.Defense)
+	}
+}
+
+func TestRegularMonsterDropRateReduced(t *testing.T) {
+	dropTable := GetRegularMonsterDropTable()
+
+	totalTrials := 1000
+	dropsOccurred := 0
+
+	for i := 0; i < totalTrials; i++ {
+		drops := dropTable.GenerateDrops()
+		if len(drops) > 0 {
+			dropsOccurred++
+		}
+		if len(drops) > 1 {
+			t.Errorf("Regular monster dropped %d items, want 0 or 1", len(drops))
+		}
+	}
+
+	dropRate := float64(dropsOccurred) / float64(totalTrials)
+	if dropRate < 0.20 || dropRate > 0.40 {
+		t.Errorf("Drop rate = %.2f, want ~0.30 (between 0.20 and 0.40)", dropRate)
+	}
+}
+
+func TestRegularMonsterDropsOnlyOneItem(t *testing.T) {
+	dropTable := GetRegularMonsterDropTable()
+
+	for i := 0; i < 100; i++ {
+		drops := dropTable.GenerateDrops()
+		if len(drops) > 1 {
+			t.Errorf("Trial %d: dropped %d items, want at most 1", i, len(drops))
+		}
+	}
+}
+
+func TestBossDropTableGuaranteesRare(t *testing.T) {
+	dropTable := GetBossDropTable("Wyvern")
+
+	for i := 0; i < 50; i++ {
+		drops := dropTable.GenerateDrops()
+
+		hasRare := false
+		for _, drop := range drops {
+			if drop.IsRare() {
+				hasRare = true
+				break
+			}
+		}
+
+		if !hasRare {
+			t.Errorf("Trial %d: Boss drop missing guaranteed rare material", i)
+		}
+	}
+}
+
+func TestBossDropTableBonusChance(t *testing.T) {
+	dropTable := GetBossDropTable("Ogre")
+
+	totalTrials := 1000
+	bonusDrops := 0
+
+	for i := 0; i < totalTrials; i++ {
+		drops := dropTable.GenerateDrops()
+		if len(drops) > 1 {
+			bonusDrops++
+		}
+		if len(drops) > 3 {
+			t.Errorf("Boss dropped %d items, want at most 3", len(drops))
+		}
+	}
+
+	bonusRate := float64(bonusDrops) / float64(totalTrials)
+	if bonusRate < 0.40 || bonusRate > 0.60 {
+		t.Errorf("Bonus drop rate = %.2f, want ~0.50 (between 0.40 and 0.60)", bonusRate)
 	}
 }
