@@ -29,4 +29,5 @@ coverage.html
 vendor/
 
 # Save files (game saves)
+assets/
 assets/data/saves/

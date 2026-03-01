@@ -380,3 +380,228 @@ func TestGetBossDropTable(t *testing.T) {
 		})
 	}
 }
+
+func TestMonsterChaseAI(t *testing.T) {
+	boss := NewBossMonster("TestBoss", 'B', 10, 10, 100, 10)
+
+	if boss.AI != AIChase {
+		t.Errorf("Boss AI = %v, want AIChase", boss.AI)
+	}
+}
+
+func TestMonsterGetChaseDirection(t *testing.T) {
+	monster := NewMonster("Test", 't', 5, 5, 10, 2)
+
+	tests := []struct {
+		targetX, targetY int
+		wantDir          ui.Direction
+	}{
+		{8, 5, ui.DirRight},
+		{2, 5, ui.DirLeft},
+		{5, 8, ui.DirDown},
+		{5, 2, ui.DirUp},
+		{8, 8, ui.DirRight}, // Diagonal equal, horizontal wins
+		{8, 6, ui.DirRight},
+		{6, 8, ui.DirDown},
+		{5, 5, ui.DirNone},
+	}
+
+	for _, tc := range tests {
+		dir := monster.GetChaseDirection(tc.targetX, tc.targetY)
+		if dir != tc.wantDir {
+			t.Errorf("GetChaseDirection(%d,%d) from (5,5) = %v, want %v",
+				tc.targetX, tc.targetY, dir, tc.wantDir)
+		}
+	}
+}
+
+func TestMonsterGetFleeDirection(t *testing.T) {
+	monster := NewMonster("Test", 't', 5, 5, 10, 2)
+
+	tests := []struct {
+		targetX, targetY int
+		wantDir          ui.Direction
+	}{
+		{8, 5, ui.DirLeft},  // Target right, flee left
+		{2, 5, ui.DirRight}, // Target left, flee right
+		{5, 8, ui.DirUp},    // Target below, flee up
+		{5, 2, ui.DirDown},  // Target above, flee down
+		{5, 5, ui.DirNone},
+	}
+
+	for _, tc := range tests {
+		dir := monster.GetFleeDirection(tc.targetX, tc.targetY)
+		if dir != tc.wantDir {
+			t.Errorf("GetFleeDirection(%d,%d) from (5,5) = %v, want %v",
+				tc.targetX, tc.targetY, dir, tc.wantDir)
+		}
+	}
+}
+
+func TestMonsterIsLowHP(t *testing.T) {
+	monster := NewMonster("Test", 't', 0, 0, 100, 5)
+
+	if monster.IsLowHP() {
+		t.Error("Full HP monster should not be low HP")
+	}
+
+	monster.HP = 29
+	if !monster.IsLowHP() {
+		t.Error("Monster at 29% HP should be low HP")
+	}
+
+	monster.HP = 30
+	if monster.IsLowHP() {
+		t.Error("Monster at exactly 30% HP should not be low HP")
+	}
+}
+
+func TestBossIsEnraged(t *testing.T) {
+	boss := NewBossMonster("Test", 'T', 0, 0, 100, 10)
+
+	if boss.IsEnraged() {
+		t.Error("Full HP boss should not be enraged")
+	}
+
+	boss.HP = 49
+	if !boss.IsEnraged() {
+		t.Error("Boss at 49% HP should be enraged")
+	}
+
+	boss.HP = 50
+	if boss.IsEnraged() {
+		t.Error("Boss at exactly 50% HP should not be enraged")
+	}
+}
+
+func TestBossEffectiveAttack(t *testing.T) {
+	boss := NewBossMonsterWithBehavior("Ogre", 'O', 0, 0, 100, 10, BossAggressive)
+
+	if boss.GetEffectiveAttack() != 10 {
+		t.Errorf("Non-enraged boss attack = %d, want 10", boss.GetEffectiveAttack())
+	}
+
+	boss.HP = 40
+	if boss.GetEffectiveAttack() != 20 {
+		t.Errorf("Enraged aggressive boss attack = %d, want 20", boss.GetEffectiveAttack())
+	}
+}
+
+func TestBossEffectiveAttackNonAggressive(t *testing.T) {
+	boss := NewBossMonsterWithBehavior("Minotaur", 'M', 0, 0, 100, 10, BossNormal)
+
+	boss.HP = 40
+	if boss.GetEffectiveAttack() != 10 {
+		t.Errorf("Enraged non-aggressive boss attack = %d, want 10 (no bonus)", boss.GetEffectiveAttack())
+	}
+}
+
+func TestBossTeleportCooldown(t *testing.T) {
+	boss := NewBossMonsterWithBehavior("Wyvern", 'W', 0, 0, 100, 10, BossTeleport)
+
+	if !boss.CanTeleport() {
+		t.Error("Boss with teleport behavior should be able to teleport initially")
+	}
+
+	boss.TeleportCooldown = 3
+	if boss.CanTeleport() {
+		t.Error("Boss on cooldown should not be able to teleport")
+	}
+
+	boss.TickCooldowns()
+	if boss.TeleportCooldown != 2 {
+		t.Errorf("Cooldown after tick = %d, want 2", boss.TeleportCooldown)
+	}
+}
+
+func TestBossSummonCooldown(t *testing.T) {
+	boss := NewBossMonsterWithBehavior("Cyclops", 'C', 0, 0, 100, 10, BossSummoner)
+
+	if !boss.CanSummon() {
+		t.Error("Boss with summoner behavior should be able to summon initially")
+	}
+
+	boss.SummonCooldown = 5
+	if boss.CanSummon() {
+		t.Error("Boss on cooldown should not be able to summon")
+	}
+}
+
+func TestNewMonsterWithAI(t *testing.T) {
+	aggressive := NewMonsterWithAI("Wolf", 'w', 5, 5, 20, 5, AIAggressive)
+
+	if aggressive.AI != AIAggressive {
+		t.Errorf("Monster AI = %v, want AIAggressive", aggressive.AI)
+	}
+}
+
+func TestGetBossBehaviorForType(t *testing.T) {
+	tests := []struct {
+		bossName string
+		want     BossBehavior
+	}{
+		{"Wyvern", BossTeleport},
+		{"Ogre", BossAggressive},
+		{"Troll", BossAggressive},
+		{"Cyclops", BossSummoner},
+		{"Minotaur", BossNormal},
+		{"Unknown", BossNormal},
+	}
+
+	for _, tc := range tests {
+		got := GetBossBehaviorForType(tc.bossName)
+		if got != tc.want {
+			t.Errorf("GetBossBehaviorForType(%q) = %v, want %v", tc.bossName, got, tc.want)
+		}
+	}
+}
+
+func TestAITypeStrings(t *testing.T) {
+	tests := []struct {
+		ai   AIType
+		want string
+	}{
+		{AIWander, "Wander"},
+		{AIChase, "Chase"},
+		{AIAggressive, "Aggressive"},
+		{AIDefensive, "Defensive"},
+		{AIFleeing, "Fleeing"},
+	}
+
+	for _, tc := range tests {
+		if got := tc.ai.String(); got != tc.want {
+			t.Errorf("AIType(%d).String() = %q, want %q", tc.ai, got, tc.want)
+		}
+	}
+}
+
+func TestBossBehaviorStrings(t *testing.T) {
+	tests := []struct {
+		behavior BossBehavior
+		want     string
+	}{
+		{BossNormal, "Normal"},
+		{BossAggressive, "Aggressive"},
+		{BossTeleport, "Teleport"},
+		{BossSummoner, "Summoner"},
+	}
+
+	for _, tc := range tests {
+		if got := tc.behavior.String(); got != tc.want {
+			t.Errorf("BossBehavior(%d).String() = %q, want %q", tc.behavior, got, tc.want)
+		}
+	}
+}
+
+func TestMonsterDefense(t *testing.T) {
+	regular := NewMonster("Goblin", 'g', 0, 0, 15, 3)
+	boss := NewBossMonster("Wyvern", 'W', 0, 0, 100, 10)
+
+	if regular.Defense != 0 {
+		t.Errorf("Regular monster defense = %d, want 0", regular.Defense)
+	}
+
+	if boss.Defense != 2 {
+		t.Errorf("Boss defense = %d, want 2", boss.Defense)
+	}
+}

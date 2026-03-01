@@ -10,15 +10,16 @@ import (
 	"beasttracker/internal/dungeon"
 	"beasttracker/internal/entity"
 	"beasttracker/internal/fov"
+	"beasttracker/internal/score"
 	"beasttracker/internal/ui"
 )
 
 const (
-	monstersPerRoom    = 2
-	playerFOVRadius    = 8
-	maxMessages        = 5
-	maxItemsPerRoom    = 2
-	maxVisibleMonsters = 4
+	baseMonstersPerRoom = 2
+	playerFOVRadius     = 8
+	maxMessages         = 5
+	maxItemsPerRoom     = 2
+	maxVisibleMonsters  = 4
 )
 
 type GameStateType int
@@ -54,9 +55,15 @@ type Game struct {
 	Messages       []string
 	InputMode      InputMode
 	CraftingCursor int
+	Score          int
+	HuntNumber     int
 }
 
 func NewGame(width, height int, seed int64) *Game {
+	return NewGameWithHunt(width, height, seed, 1, nil)
+}
+
+func NewGameWithHunt(width, height int, seed int64, huntNumber int, previousPlayer *entity.Player) *Game {
 	rng := rand.New(rand.NewSource(seed))
 
 	generatedDungeon := dungeon.GenerateDungeon(width, height, seed)
@@ -69,10 +76,21 @@ func NewGame(width, height int, seed int64) *Game {
 		playerY = height / 2
 	}
 
+	var player *entity.Player
+	if previousPlayer != nil {
+		player = entity.NewPlayer(playerX, playerY)
+		player.EquippedWeapon = previousPlayer.EquippedWeapon
+		player.EquippedArmor = previousPlayer.EquippedArmor
+		player.EquippedCharm = previousPlayer.EquippedCharm
+		player.MaterialPouch = previousPlayer.MaterialPouch
+	} else {
+		player = entity.NewPlayer(playerX, playerY)
+	}
+
 	newGame := &Game{
 		Width:          width,
 		Height:         height,
-		Player:         entity.NewPlayer(playerX, playerY),
+		Player:         player,
 		Dungeon:        generatedDungeon,
 		Monsters:       make([]*entity.Monster, 0),
 		Items:          make([]*entity.Item, 0),
@@ -84,6 +102,8 @@ func NewGame(width, height int, seed int64) *Game {
 		Messages:       make([]string, 0),
 		InputMode:      InputModeNormal,
 		CraftingCursor: 0,
+		Score:          0,
+		HuntNumber:     huntNumber,
 	}
 
 	newGame.spawnMonsters(rng)
@@ -92,6 +112,18 @@ func NewGame(width, height int, seed int64) *Game {
 	newGame.ComputeFOV()
 
 	return newGame
+}
+
+func (g *Game) getMonstersPerRoom() int {
+	return baseMonstersPerRoom + (g.HuntNumber-1)/2
+}
+
+func (g *Game) getMonsterHPMultiplier() float64 {
+	return 1.0 + float64(g.HuntNumber-1)*0.15
+}
+
+func (g *Game) getMonsterAttackBonus() int {
+	return (g.HuntNumber - 1) / 2
 }
 
 func (g *Game) ComputeFOV() {
@@ -113,11 +145,14 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 		glyph  rune
 		hp     int
 		attack int
+		ai     entity.AIType
 	}{
-		{"Goblin", 'g', 15, 3},
-		{"Rat", 'r', 8, 2},
-		{"Spider", 's', 12, 2},
-		{"Bat", 'b', 10, 2},
+		{"Goblin", 'g', 15, 3, entity.AIWander},
+		{"Rat", 'r', 8, 2, entity.AIFleeing},
+		{"Spider", 's', 12, 2, entity.AIAggressive},
+		{"Bat", 'b', 10, 2, entity.AIWander},
+		{"Wolf", 'w', 18, 4, entity.AIChase},
+		{"Slime", 'S', 20, 2, entity.AIDefensive},
 	}
 
 	startRoom := 1
@@ -125,9 +160,13 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 		startRoom = 0
 	}
 
+	monstersPerRoom := g.getMonstersPerRoom()
+	hpMultiplier := g.getMonsterHPMultiplier()
+	attackBonus := g.getMonsterAttackBonus()
+
 	for i := startRoom; i < len(g.Dungeon.Rooms); i++ {
 		room := g.Dungeon.Rooms[i]
-		numMonsters := rng.Intn(3) + 1
+		numMonsters := rng.Intn(monstersPerRoom) + 1
 
 		for j := 0; j < numMonsters; j++ {
 			x := room.X + rng.Intn(room.Width)
@@ -146,7 +185,10 @@ func (g *Game) spawnMonsters(rng *rand.Rand) {
 			}
 
 			mType := monsterTypes[rng.Intn(len(monsterTypes))]
-			monster := entity.NewMonster(mType.name, mType.glyph, x, y, mType.hp, mType.attack)
+			scaledHP := int(float64(mType.hp) * hpMultiplier)
+			scaledAttack := mType.attack + attackBonus
+
+			monster := entity.NewMonsterWithAI(mType.name, mType.glyph, x, y, scaledHP, scaledAttack, mType.ai)
 			monster.DropTable = entity.GetRegularMonsterDropTable()
 			g.Monsters = append(g.Monsters, monster)
 		}
@@ -180,23 +222,30 @@ func (g *Game) spawnBoss(rng *rand.Rand) {
 	}
 
 	bossTypes := []struct {
-		name   string
-		glyph  rune
-		hp     int
-		attack int
+		name     string
+		glyph    rune
+		hp       int
+		attack   int
+		behavior entity.BossBehavior
 	}{
-		{"Wyvern", 'W', 80, 12},
-		{"Ogre", 'O', 100, 10},
-		{"Troll", 'T', 90, 11},
-		{"Cyclops", 'C', 85, 13},
-		{"Minotaur", 'M', 95, 12},
+		{"Wyvern", 'W', 80, 12, entity.BossTeleport},
+		{"Ogre", 'O', 100, 10, entity.BossAggressive},
+		{"Troll", 'T', 90, 11, entity.BossAggressive},
+		{"Cyclops", 'C', 85, 13, entity.BossSummoner},
+		{"Minotaur", 'M', 95, 12, entity.BossNormal},
 	}
 
 	lastRoom := g.Dungeon.Rooms[len(g.Dungeon.Rooms)-1]
 	cx, cy := lastRoom.Center()
 
 	bossType := bossTypes[rng.Intn(len(bossTypes))]
-	boss := entity.NewBossMonster(bossType.name, bossType.glyph, cx, cy, bossType.hp, bossType.attack)
+
+	hpMultiplier := g.getMonsterHPMultiplier()
+	attackBonus := g.getMonsterAttackBonus()
+	scaledHP := int(float64(bossType.hp) * hpMultiplier)
+	scaledAttack := bossType.attack + attackBonus
+
+	boss := entity.NewBossMonsterWithBehavior(bossType.name, bossType.glyph, cx, cy, scaledHP, scaledAttack, bossType.behavior)
 	boss.DropTable = entity.GetBossDropTable(bossType.name)
 	g.Monsters = append(g.Monsters, boss)
 }
@@ -322,10 +371,328 @@ func (g *Game) UpdateMonsterAI() {
 			continue
 		}
 
+		monster.TickCooldowns()
+
+		if monster.IsBoss {
+			g.updateBossAI(monster, rng)
+			continue
+		}
+
 		switch monster.AI {
 		case entity.AIWander:
 			g.updateWanderAI(monster, rng)
+		case entity.AIChase:
+			g.updateChaseAI(monster, rng)
+		case entity.AIAggressive:
+			g.updateAggressiveAI(monster, rng)
+		case entity.AIDefensive:
+			g.updateDefensiveAI(monster, rng)
+		case entity.AIFleeing:
+			g.updateFleeingAI(monster, rng)
 		}
+	}
+}
+
+func (g *Game) updateBossAI(boss *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	bx, by := boss.Position()
+
+	// Check for adjacency first
+	dx := px - bx
+	dy := py - by
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.bossAttack(boss)
+		return
+	}
+
+	// Handle special behaviors
+	switch boss.BossBehavior {
+	case entity.BossTeleport:
+		if boss.CanTeleport() && rng.Intn(4) == 0 {
+			if g.tryBossTeleport(boss, rng) {
+				boss.TeleportCooldown = 5
+				g.AddMessage(fmt.Sprintf("The %s vanishes and reappears nearby!", boss.Name))
+				return
+			}
+		}
+	case entity.BossSummoner:
+		if boss.CanSummon() && rng.Intn(6) == 0 {
+			if g.tryBossSummon(boss, rng) {
+				boss.SummonCooldown = 8
+				return
+			}
+		}
+	}
+
+	// Default chase behavior
+	g.updateChaseAI(boss, rng)
+}
+
+func (g *Game) bossAttack(boss *entity.Monster) {
+	damage := g.CalculateDamage(boss.GetEffectiveAttack(), g.Player.EffectiveDefense())
+	g.Player.TakeDamage(damage)
+
+	if boss.IsEnraged() && boss.BossBehavior == entity.BossAggressive {
+		g.AddMessage(fmt.Sprintf("The enraged %s hits you for %d damage!", boss.Name, damage))
+	} else {
+		g.AddMessage(fmt.Sprintf("The %s hits you for %d damage!", boss.Name, damage))
+	}
+
+	if g.Player.Dead {
+		g.GameState = StateGameOver
+		g.AddMessage("You have been slain!")
+	}
+}
+
+func (g *Game) tryBossTeleport(boss *entity.Monster, rng *rand.Rand) bool {
+	px, py := g.Player.Position()
+
+	// Find valid positions 2-4 tiles from player
+	var validPositions []position
+	for radius := 2; radius <= 4; radius++ {
+		for dx := -radius; dx <= radius; dx++ {
+			for dy := -radius; dy <= radius; dy++ {
+				if abs(dx) != radius && abs(dy) != radius {
+					continue
+				}
+
+				checkX, checkY := px+dx, py+dy
+				if g.isValidTeleportPosition(checkX, checkY) {
+					validPositions = append(validPositions, position{checkX, checkY})
+				}
+			}
+		}
+	}
+
+	if len(validPositions) == 0 {
+		return false
+	}
+
+	chosen := validPositions[rng.Intn(len(validPositions))]
+	boss.SetPosition(chosen.x, chosen.y)
+	return true
+}
+
+func (g *Game) isValidTeleportPosition(x, y int) bool {
+	if !g.Dungeon.IsWalkable(x, y) {
+		return false
+	}
+
+	px, py := g.Player.Position()
+	if x == px && y == py {
+		return false
+	}
+
+	if g.GetMonsterAt(x, y) != nil {
+		return false
+	}
+
+	return true
+}
+
+func (g *Game) tryBossSummon(boss *entity.Monster, rng *rand.Rand) bool {
+	bx, by := boss.Position()
+
+	minionTypes := []struct {
+		name   string
+		glyph  rune
+		hp     int
+		attack int
+	}{
+		{"Imp", 'i', 8, 2},
+		{"Shade", 'h', 6, 3},
+	}
+
+	// Find valid spawn position adjacent to boss
+	var validPositions []position
+	for dx := -1; dx <= 1; dx++ {
+		for dy := -1; dy <= 1; dy++ {
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			checkX, checkY := bx+dx, by+dy
+			if g.Dungeon.IsWalkable(checkX, checkY) && g.GetMonsterAt(checkX, checkY) == nil {
+				px, py := g.Player.Position()
+				if checkX != px || checkY != py {
+					validPositions = append(validPositions, position{checkX, checkY})
+				}
+			}
+		}
+	}
+
+	if len(validPositions) == 0 {
+		return false
+	}
+
+	chosen := validPositions[rng.Intn(len(validPositions))]
+	mType := minionTypes[rng.Intn(len(minionTypes))]
+
+	minion := entity.NewMonsterWithAI(mType.name, mType.glyph, chosen.x, chosen.y, mType.hp, mType.attack, entity.AIAggressive)
+	minion.DropTable = entity.GetRegularMonsterDropTable()
+	g.Monsters = append(g.Monsters, minion)
+
+	g.AddMessage(fmt.Sprintf("The %s summons a %s!", boss.Name, mType.name))
+	return true
+}
+
+func (g *Game) updateAggressiveAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	// Always attack if adjacent
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.monsterAttack(monster)
+		return
+	}
+
+	// Always chase (no wandering)
+	if !g.IsVisible(mx, my) {
+		// Even when not visible, aggressive monsters move toward last known position
+		g.moveMonsterToward(monster, px, py)
+		return
+	}
+
+	g.moveMonsterToward(monster, px, py)
+}
+
+func (g *Game) updateDefensiveAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	dx := px - mx
+	dy := py - my
+	adjacent := (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0
+
+	// Retreat when low HP
+	if monster.IsLowHP() {
+		if adjacent {
+			// Attack then try to flee
+			g.monsterAttack(monster)
+		}
+		g.moveMonsterAway(monster, px, py)
+		return
+	}
+
+	// Normal chase behavior when healthy
+	if adjacent {
+		g.monsterAttack(monster)
+		return
+	}
+
+	if g.IsVisible(mx, my) {
+		g.moveMonsterToward(monster, px, py)
+	} else {
+		g.updateWanderAI(monster, rng)
+	}
+}
+
+func (g *Game) updateFleeingAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	// Only attack if cornered (can't flee)
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		if !g.canMonsterFlee(monster, px, py) {
+			g.monsterAttack(monster)
+		}
+		return
+	}
+
+	// Always flee
+	g.moveMonsterAway(monster, px, py)
+}
+
+func (g *Game) moveMonsterToward(monster *entity.Monster, targetX, targetY int) {
+	mx, my := monster.Position()
+	dir := monster.GetChaseDirection(targetX, targetY)
+	if dir == ui.DirNone {
+		return
+	}
+
+	ddx, ddy := dir.Delta()
+	newX, newY := mx+ddx, my+ddy
+
+	if !g.Dungeon.IsWalkable(newX, newY) || g.GetMonsterAt(newX, newY) != nil {
+		altDir := g.findAlternateChaseDirection(monster, targetX, targetY, dir)
+		if altDir == ui.DirNone {
+			return
+		}
+		ddx, ddy = altDir.Delta()
+		newX, newY = mx+ddx, my+ddy
+	}
+
+	if !g.Dungeon.IsWalkable(newX, newY) || g.GetMonsterAt(newX, newY) != nil {
+		return
+	}
+
+	px, py := g.Player.Position()
+	if newX == px && newY == py {
+		return
+	}
+
+	monster.SetPosition(newX, newY)
+}
+
+func (g *Game) moveMonsterAway(monster *entity.Monster, targetX, targetY int) {
+	mx, my := monster.Position()
+	dir := monster.GetFleeDirection(targetX, targetY)
+	if dir == ui.DirNone {
+		return
+	}
+
+	ddx, ddy := dir.Delta()
+	newX, newY := mx+ddx, my+ddy
+
+	if !g.Dungeon.IsWalkable(newX, newY) || g.GetMonsterAt(newX, newY) != nil {
+		// Try perpendicular directions
+		alternatives := g.getPerpendicularDirections(dir)
+		for _, alt := range alternatives {
+			adx, ady := alt.Delta()
+			newX, newY = mx+adx, my+ady
+			if g.Dungeon.IsWalkable(newX, newY) && g.GetMonsterAt(newX, newY) == nil {
+				break
+			}
+			newX, newY = mx, my
+		}
+	}
+
+	if newX == mx && newY == my {
+		return
+	}
+
+	px, py := g.Player.Position()
+	if newX == px && newY == py {
+		return
+	}
+
+	monster.SetPosition(newX, newY)
+}
+
+func (g *Game) canMonsterFlee(monster *entity.Monster, playerX, playerY int) bool {
+	mx, my := monster.Position()
+	dir := monster.GetFleeDirection(playerX, playerY)
+	if dir == ui.DirNone {
+		return false
+	}
+
+	ddx, ddy := dir.Delta()
+	newX, newY := mx+ddx, my+ddy
+
+	return g.Dungeon.IsWalkable(newX, newY) && g.GetMonsterAt(newX, newY) == nil
+}
+
+func (g *Game) getPerpendicularDirections(dir ui.Direction) []ui.Direction {
+	switch dir {
+	case ui.DirUp, ui.DirDown:
+		return []ui.Direction{ui.DirLeft, ui.DirRight}
+	case ui.DirLeft, ui.DirRight:
+		return []ui.Direction{ui.DirUp, ui.DirDown}
+	default:
+		return nil
 	}
 }
 
@@ -366,6 +733,90 @@ func (g *Game) updateWanderAI(monster *entity.Monster, rng *rand.Rand) {
 	monster.SetPosition(newX, newY)
 }
 
+func (g *Game) updateChaseAI(monster *entity.Monster, rng *rand.Rand) {
+	px, py := g.Player.Position()
+	mx, my := monster.Position()
+
+	dx := px - mx
+	dy := py - my
+	if (dx == 1 || dx == -1) && dy == 0 || (dy == 1 || dy == -1) && dx == 0 {
+		g.monsterAttack(monster)
+		return
+	}
+
+	if !g.IsVisible(mx, my) {
+		g.updateWanderAI(monster, rng)
+		return
+	}
+
+	dir := monster.GetChaseDirection(px, py)
+	if dir == ui.DirNone {
+		return
+	}
+
+	ddx, ddy := dir.Delta()
+	newX := mx + ddx
+	newY := my + ddy
+
+	if !g.Dungeon.IsWalkable(newX, newY) {
+		altDir := g.findAlternateChaseDirection(monster, px, py, dir)
+		if altDir == ui.DirNone {
+			return
+		}
+		ddx, ddy = altDir.Delta()
+		newX = mx + ddx
+		newY = my + ddy
+	}
+
+	if !g.Dungeon.IsWalkable(newX, newY) {
+		return
+	}
+
+	if newX == px && newY == py {
+		return
+	}
+
+	if g.GetMonsterAt(newX, newY) != nil {
+		return
+	}
+
+	monster.SetPosition(newX, newY)
+}
+
+func (g *Game) findAlternateChaseDirection(monster *entity.Monster, targetX, targetY int, blockedDir ui.Direction) ui.Direction {
+	mx, my := monster.Position()
+	dx := targetX - mx
+	dy := targetY - my
+
+	var alternatives []ui.Direction
+
+	if blockedDir == ui.DirLeft || blockedDir == ui.DirRight {
+		if dy > 0 {
+			alternatives = append(alternatives, ui.DirDown)
+		}
+		if dy < 0 {
+			alternatives = append(alternatives, ui.DirUp)
+		}
+	} else {
+		if dx > 0 {
+			alternatives = append(alternatives, ui.DirRight)
+		}
+		if dx < 0 {
+			alternatives = append(alternatives, ui.DirLeft)
+		}
+	}
+
+	for _, alt := range alternatives {
+		adx, ady := alt.Delta()
+		newX, newY := mx+adx, my+ady
+		if g.Dungeon.IsWalkable(newX, newY) && g.GetMonsterAt(newX, newY) == nil {
+			return alt
+		}
+	}
+
+	return ui.DirNone
+}
+
 func (g *Game) HandleInput(action ui.Action, dir ui.Direction) {
 	switch action {
 	case ui.ActionQuit:
@@ -400,7 +851,7 @@ func (g *Game) tryMovePlayer(dir ui.Direction) {
 	g.Player.SetPosition(newX, newY)
 
 	g.tryPickupItem(newX, newY)
-	g.tryPickupMaterial(newX, newY)
+	g.tryPickupMaterials(newX, newY)
 
 	g.ComputeFOV()
 }
@@ -421,15 +872,17 @@ func (g *Game) tryPickupItem(x, y int) {
 	g.AddMessage(fmt.Sprintf("Picked up %s.", item.Name()))
 }
 
-func (g *Game) tryPickupMaterial(x, y int) {
-	material := g.GetMaterialAt(x, y)
-	if material == nil {
-		return
-	}
+func (g *Game) tryPickupMaterials(x, y int) {
+	for {
+		material := g.GetMaterialAt(x, y)
+		if material == nil {
+			return
+		}
 
-	g.Player.MaterialPouch.Add(material.Type, 1)
-	g.RemoveMaterial(material)
-	g.AddMessage(fmt.Sprintf("Picked up %s.", material.Name()))
+		g.Player.MaterialPouch.Add(material.Type, 1)
+		g.RemoveMaterial(material)
+		g.AddMessage(fmt.Sprintf("Picked up %s.", material.Name()))
+	}
 }
 
 func (g *Game) UseItemInSlot(slot int) {
@@ -504,9 +957,11 @@ func (g *Game) playerAttack(monster *entity.Monster) {
 		g.spawnMonsterDrops(monster)
 
 		if monster.IsBoss {
+			g.Score += score.PointsPerBoss
 			g.AddMessage(fmt.Sprintf("You have slain the %s! VICTORY!", monster.Name))
 			g.GameState = StateVictory
 		} else {
+			g.Score += score.PointsPerMonster
 			g.AddMessage(fmt.Sprintf("You killed the %s!", monster.Name))
 		}
 		g.RemoveDeadMonsters()
@@ -527,8 +982,6 @@ func (g *Game) spawnMonsterDrops(monster *entity.Monster) {
 
 	mx, my := monster.Position()
 
-	// Find valid positions around the monster for drops
-	// Start with the monster's position, then spiral outward
 	validPositions := g.findDropPositions(mx, my, len(drops))
 
 	for i, materialType := range drops {
@@ -536,8 +989,6 @@ func (g *Game) spawnMonsterDrops(monster *entity.Monster) {
 		if i < len(validPositions) {
 			posX, posY = validPositions[i].x, validPositions[i].y
 		} else {
-			// Fallback: if we couldn't find enough positions, stack on monster position
-			// This should be rare in practice
 			posX, posY = mx, my
 		}
 
@@ -546,17 +997,13 @@ func (g *Game) spawnMonsterDrops(monster *entity.Monster) {
 	}
 }
 
-// position is a simple coordinate pair for drop placement
 type position struct {
 	x, y int
 }
 
-// findDropPositions finds valid positions for material drops, starting from center
-// and spiraling outward. Returns up to count positions.
 func (g *Game) findDropPositions(centerX, centerY, count int) []position {
 	positions := make([]position, 0, count)
 
-	// Check center first (where monster died)
 	if g.isValidDropPosition(centerX, centerY) {
 		positions = append(positions, position{centerX, centerY})
 		if len(positions) >= count {
@@ -564,22 +1011,17 @@ func (g *Game) findDropPositions(centerX, centerY, count int) []position {
 		}
 	}
 
-	// Spiral outward checking adjacent tiles
-	// Order: immediate neighbors first, then expand radius
-	maxRadius := 5 // Don't spread too far
+	maxRadius := 5
 
 	for radius := 1; radius <= maxRadius && len(positions) < count; radius++ {
-		// Check all tiles at this radius (square ring around center)
 		for dx := -radius; dx <= radius; dx++ {
 			for dy := -radius; dy <= radius; dy++ {
-				// Only check tiles on the edge of this radius
 				if abs(dx) != radius && abs(dy) != radius {
 					continue
 				}
 
 				checkX, checkY := centerX+dx, centerY+dy
 				if g.isValidDropPosition(checkX, checkY) {
-					// Also check this position isn't already in our list
 					alreadyUsed := false
 					for _, p := range positions {
 						if p.x == checkX && p.y == checkY {
@@ -601,30 +1043,24 @@ func (g *Game) findDropPositions(centerX, centerY, count int) []position {
 	return positions
 }
 
-// isValidDropPosition checks if a position is suitable for dropping a material
 func (g *Game) isValidDropPosition(x, y int) bool {
-	// Must be walkable
 	if !g.Dungeon.IsWalkable(x, y) {
 		return false
 	}
 
-	// Can't be on player
 	px, py := g.Player.Position()
 	if x == px && y == py {
 		return false
 	}
 
-	// Can't be on a living monster
 	if g.GetMonsterAt(x, y) != nil {
 		return false
 	}
 
-	// Can't be on an existing item
 	if g.GetItemAt(x, y) != nil {
 		return false
 	}
 
-	// Can't be on an existing material
 	if g.GetMaterialAt(x, y) != nil {
 		return false
 	}

@@ -271,63 +271,75 @@ All tasks completed in Phase 2.
 
 ---
 
-## Phase 10: Enhanced AI ⏳
+## Phase 10: Enhanced AI ✅
 
 **Goal**: Smarter monster behavior
 
 ### Tasks
 
-- [ ] Implement chase AI (pursue player when in FOV)
-- [ ] Boss-specific behaviors (aggressive, teleport, summon)
-- [ ] AI respects FOV (no cheating)
-- [ ] Different monster archetypes (aggressive, defensive, fleeing)
-- [ ] Write tests for AI state transitions
+- [x] Implement chase AI (pursue player when in FOV)
+- [x] Boss-specific behaviors:
+  - [x] Aggressive (Ogre, Troll): Double damage when below 50% HP
+  - [x] Teleport (Wyvern): Blink near player with cooldown
+  - [x] Summoner (Cyclops): Spawn minion monsters with cooldown
+- [x] AI respects FOV (no cheating)
+- [x] Different monster archetypes:
+  - [x] Wander (Goblin, Bat): Random movement
+  - [x] Chase (Wolf): Pursue when visible
+  - [x] Aggressive (Spider): Always pursue
+  - [x] Defensive (Slime): Retreat when low HP
+  - [x] Fleeing (Rat): Run away, fight when cornered
+- [x] Write tests for AI behaviors and boss abilities
+- [x] Boss defense stat added
 
 **Deliverable**: Dynamic, challenging combat encounters.
 
-**Commit Message**: `Phase 10: Enhanced monster AI`
+**Commit Message**: `Phases 10-12: Enhanced AI, Scoring System, and Hunt Progression`
 
 ---
 
-## Phase 11: Scoring & Leaderboard ⏳
+## Phase 11: Scoring & Leaderboard ✅
 
 **Goal**: Score tracking and high score persistence
 
 ### Tasks
 
-- [ ] Create `score/leaderboard.go` - scoring system
-- [ ] Score calculation:
+- [x] Create `score/leaderboard.go` - scoring system
+- [x] Score calculation:
   - Regular monster: 10 points
-  - Boss monster: 20 points
-  - Hunt completion: 50 points
-- [ ] Persist top-10 scores to `assets/data/scores.json`
-- [ ] Initials entry for high scores
-- [ ] Display leaderboard on splash screen and game over
-- [ ] Write tests for scoring logic
+  - Boss monster: 50 points
+- [x] Persist top-10 scores to `assets/data/scores.json`
+- [x] Initials entry for high scores (3 letters)
+- [x] Display leaderboard on splash screen
+- [x] Score display in game HUD
+- [x] Write tests for scoring logic
 
 **Deliverable**: Competitive replayability with leaderboard.
 
-**Commit Message**: `Phase 11: Scoring and leaderboard system`
+**Commit Message**: `Phases 10-12: Enhanced AI, Scoring System, and Hunt Progression`
 
 ---
 
-## Phase 12: Hunt Progression ⏳
+## Phase 12: Hunt Progression ✅
 
 **Goal**: Sequential hunts with difficulty scaling
 
 ### Tasks
 
-- [ ] After boss defeat, offer "Next Hunt" option
-- [ ] Persist player equipment across hunts
-- [ ] Scale difficulty: more/stronger monsters, tougher bosses
-- [ ] Track hunt number and display progress
-- [ ] Create meta-progression screen (equipment, hunt history)
-- [ ] Write tests for difficulty scaling
-- [ ] **Future consideration**: Tiered equipment (Basic → Advanced → Master) with more varied recipes for deeper progression
+- [x] After boss defeat, offer "Next Hunt" option (N key)
+- [x] Persist player equipment across hunts
+- [x] Persist material pouch across hunts
+- [x] Scale difficulty per hunt:
+  - [x] Monster HP: +15% per hunt
+  - [x] Monster ATK: +1 per 2 hunts
+  - [x] Monsters per room: +1 per 2 hunts
+- [x] Track hunt number and display in HUD
+- [x] Cumulative score across hunt chain
+- [x] Write tests for difficulty scaling and persistence
 
 **Deliverable**: Multi-hunt campaign with escalating challenge.
 
-**Commit Message**: `Phase 12: Hunt progression and difficulty scaling`
+**Commit Message**: `Phases 10-12: Enhanced AI, Scoring System, and Hunt Progression`
 
 ---
 
@@ -337,18 +349,15 @@ All tasks completed in Phase 2.
 
 ### Tasks
 
-- [ ] Create `ui/menu.go` - menu system
-- [ ] Main menu: New Game, Continue, Leaderboard, Quit
-- [ ] Pause menu (ESC during game)
-- [ ] Quit confirmation dialog (protect against accidental 'q' press)
-- [ ] Crafting menu improvements (show stats, materials)
-- [ ] Color scheme and visual polish (tcell colors)
-- [ ] Victory screen with score breakdown
-- [ ] Death screen with score and retry option
+- [ ] Main menu: New Game, Leaderboard, Quit
+- [ ] Pause menu (ESC during game) with resume option
+- [ ] Quit confirmation dialog
+- [ ] Equipment display screen
+- [ ] Color scheme polish
+- [ ] Victory screen with detailed score breakdown
+- [ ] Death screen with retry option
 
 **Deliverable**: Professional menu flow and presentation.
-
-**Commit Message**: `Phase 13: Menu system and UI polish`
 
 ---
 
@@ -360,14 +369,12 @@ All tasks completed in Phase 2.
 
 - [ ] Create `save/save.go` - serialization system
 - [ ] Save game state to JSON
-- [ ] Save on quit or manual save command
+- [ ] Auto-save between hunts
 - [ ] Load game from main menu
 - [ ] Handle corrupted save files gracefully
 - [ ] Write tests for serialization round-trip
 
 **Deliverable**: Players can resume interrupted hunts.
-
-**Commit Message**: `Phase 14: Save and load system`
 
 ---
 
@@ -377,16 +384,15 @@ All tasks completed in Phase 2.
 
 ### Tasks
 
+- [ ] Reduce regular monster drop rates (currently too high)
 - [ ] Balance monster HP/damage values
 - [ ] Tune item spawn rates
 - [ ] Adjust boss difficulty curve
-- [ ] Test crafting progression (is grind reasonable?)
-- [ ] Performance check (large dungeons, many monsters)
+- [ ] Test crafting progression
+- [ ] Performance check
 - [ ] Bug fixes from playtesting
 
 **Deliverable**: Fair, fun, polished gameplay.
-
-**Commit Message**: `Phase 15: Balance tuning and bug fixes`
 
 ---
 
@@ -396,15 +402,13 @@ All tasks completed in Phase 2.
 
 ### Tasks
 
-- [ ] Update README.md (how to play, controls, gameplay loop)
+- [ ] Update README.md with final mechanics
 - [ ] Code cleanup and documentation
 - [ ] Final bug sweep
 - [ ] Build instructions (cross-platform)
 - [ ] Create release build
 
 **Deliverable**: Complete, documented, playable game.
-
-**Commit Message**: `Phase 16: Final polish and documentation`
 
 ---
 

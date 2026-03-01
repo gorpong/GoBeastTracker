@@ -55,6 +55,8 @@ const (
 	ActionUseItem
 	ActionConfirm
 	ActionCraft
+	ActionNextHunt
+	ActionBackspace
 )
 
 func (a Action) String() string {
@@ -75,6 +77,10 @@ func (a Action) String() string {
 		return "Confirm"
 	case ActionCraft:
 		return "Craft"
+	case ActionNextHunt:
+		return "NextHunt"
+	case ActionBackspace:
+		return "Backspace"
 	default:
 		return "Unknown"
 	}
@@ -120,6 +126,10 @@ func ParseAction(key tcell.Key, r rune) Action {
 		return ActionConfirm
 	}
 
+	if key == tcell.KeyBackspace || key == tcell.KeyBackspace2 {
+		return ActionBackspace
+	}
+
 	if key == tcell.KeyRune && (r == 'i' || r == 'I') {
 		return ActionInventory
 	}
@@ -130,6 +140,10 @@ func ParseAction(key tcell.Key, r rune) Action {
 
 	if key == tcell.KeyRune && (r == 'c' || r == 'C') {
 		return ActionCraft
+	}
+
+	if key == tcell.KeyRune && (r == 'n' || r == 'N') {
+		return ActionNextHunt
 	}
 
 	if key == tcell.KeyRune && r >= '1' && r <= '9' {
@@ -148,4 +162,17 @@ func ParseSlotNumber(r rune) (int, bool) {
 		return int(r - '0'), true
 	}
 	return 0, false
+}
+
+// IsLetter returns true if the rune is A-Z (for initials entry)
+func IsLetter(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
+// ToUpper converts a letter to uppercase
+func ToUpper(r rune) rune {
+	if r >= 'a' && r <= 'z' {
+		return r - 32
+	}
+	return r
 }

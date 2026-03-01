@@ -1421,3 +1421,152 @@ func TestGameMonsterDropsDontOverlapItems(t *testing.T) {
 		}
 	}
 }
+
+func TestGameScore(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.Score != 0 {
+		t.Errorf("Initial score = %d, want 0", testGame.Score)
+	}
+}
+
+func TestGameHuntNumber(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	if testGame.HuntNumber != 1 {
+		t.Errorf("Initial hunt number = %d, want 1", testGame.HuntNumber)
+	}
+}
+
+func TestGameScoreOnMonsterKill(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	var targetMonster *entity.Monster
+	for _, monster := range testGame.Monsters {
+		if !monster.IsBoss {
+			targetMonster = monster
+			break
+		}
+	}
+
+	if targetMonster == nil {
+		t.Skip("No regular monster found")
+	}
+
+	targetMonster.HP = 1
+	mx, my := targetMonster.Position()
+	testGame.Player.SetPosition(mx-1, my)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.Score != 10 {
+		t.Errorf("Score after kill = %d, want 10", testGame.Score)
+	}
+}
+
+func TestGameScoreOnBossKill(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	boss.HP = 1
+	bx, by := boss.Position()
+	testGame.Player.SetPosition(bx-1, by)
+
+	testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+	if testGame.Score != 50 {
+		t.Errorf("Score after boss kill = %d, want 50", testGame.Score)
+	}
+}
+
+func TestNewGameWithHunt(t *testing.T) {
+	firstGame := NewGame(50, 30, 12345)
+	
+	weapon := entity.NewEquipment("Test Sword", entity.SlotWeapon, 5, 0, 0)
+	firstGame.Player.Equip(weapon)
+	firstGame.Player.MaterialPouch.Add(entity.MaterialScales, 10)
+
+	secondGame := NewGameWithHunt(50, 30, 54321, 2, firstGame.Player)
+
+	if secondGame.HuntNumber != 2 {
+		t.Errorf("Hunt number = %d, want 2", secondGame.HuntNumber)
+	}
+
+	if secondGame.Player.EquippedWeapon == nil {
+		t.Error("Equipment should persist to next hunt")
+	}
+
+	if secondGame.Player.MaterialPouch.Count(entity.MaterialScales) != 10 {
+		t.Error("Materials should persist to next hunt")
+	}
+
+	if secondGame.Player.HP != entity.DefaultPlayerHP {
+		t.Errorf("HP should reset, got %d", secondGame.Player.HP)
+	}
+}
+
+func TestDifficultyScaling(t *testing.T) {
+	hunt1 := NewGame(50, 30, 12345)
+	hunt3 := NewGameWithHunt(50, 30, 12345, 3, nil)
+
+	var hunt1Monster, hunt3Monster *entity.Monster
+	for _, m := range hunt1.Monsters {
+		if !m.IsBoss && m.Name == "Goblin" {
+			hunt1Monster = m
+			break
+		}
+	}
+	for _, m := range hunt3.Monsters {
+		if !m.IsBoss && m.Name == "Goblin" {
+			hunt3Monster = m
+			break
+		}
+	}
+
+	if hunt1Monster != nil && hunt3Monster != nil {
+		if hunt3Monster.MaxHP <= hunt1Monster.MaxHP {
+			t.Error("Hunt 3 monsters should have more HP than hunt 1")
+		}
+	}
+}
+
+func TestBossUsesChaseAI(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	if boss.AI != entity.AIChase {
+		t.Errorf("Boss AI = %v, want AIChase", boss.AI)
+	}
+}
+
+func TestChaseAIMovesTowardPlayer(t *testing.T) {
+	testGame := NewGame(50, 30, 12345)
+
+	boss := testGame.GetBoss()
+	if boss == nil {
+		t.Skip("No boss found")
+	}
+
+	px, py := testGame.Player.Position()
+	
+	boss.SetPosition(px+5, py)
+	testGame.ComputeFOV()
+	
+	initialBX, _ := boss.Position()
+
+	testGame.UpdateMonsterAI()
+
+	newBX, _ := boss.Position()
+	
+	if testGame.IsVisible(initialBX, py) && newBX >= initialBX {
+		t.Error("Chase AI should move boss toward player when visible")
+	}
+}
