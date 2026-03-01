@@ -1268,3 +1268,156 @@ func TestGameGetAllRecipes(t *testing.T) {
 		t.Error("GetAllRecipes should return at least one recipe")
 	}
 }
+
+// TestGameMonsterDropsSpreadOut verifies materials spawn at different positions
+func TestGameMonsterDropsSpreadOut(t *testing.T) {
+	// We need a scenario where a monster drops multiple materials
+	// Boss monsters guarantee a rare drop + possible common drops
+	// We'll test that when multiple materials drop, they're at different positions
+
+	foundSpreadDrops := false
+
+	for seed := int64(1); seed <= 50; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		boss := testGame.GetBoss()
+		if boss == nil {
+			continue
+		}
+
+		// Place player adjacent to boss and kill it
+		bx, by := boss.Position()
+		testGame.Player.SetPosition(bx-1, by)
+		boss.HP = 1
+
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		// Check if we got multiple materials
+		if len(testGame.Materials) < 2 {
+			continue
+		}
+
+		// Verify no two materials share the same position
+		positions := make(map[string]bool)
+		allUnique := true
+		for _, mat := range testGame.Materials {
+			mx, my := mat.Position()
+			key := fmt.Sprintf("%d,%d", mx, my)
+			if positions[key] {
+				allUnique = false
+				break
+			}
+			positions[key] = true
+		}
+
+		if allUnique && len(testGame.Materials) >= 2 {
+			foundSpreadDrops = true
+			break
+		}
+	}
+
+	if !foundSpreadDrops {
+		t.Error("When multiple materials drop, they should spawn at different positions")
+	}
+}
+
+// TestGameMonsterDropsOnWalkableTiles verifies all dropped materials land on walkable tiles
+func TestGameMonsterDropsOnWalkableTiles(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		boss := testGame.GetBoss()
+		if boss == nil {
+			continue
+		}
+
+		bx, by := boss.Position()
+		testGame.Player.SetPosition(bx-1, by)
+		boss.HP = 1
+
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		for i, mat := range testGame.Materials {
+			mx, my := mat.Position()
+			if !testGame.Dungeon.IsWalkable(mx, my) {
+				t.Errorf("Seed %d: Material %d at (%d,%d) is not on walkable tile", seed, i, mx, my)
+			}
+		}
+	}
+}
+
+// TestGameMonsterDropsDontOverlapPlayer verifies materials don't spawn on player
+func TestGameMonsterDropsDontOverlapPlayer(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		boss := testGame.GetBoss()
+		if boss == nil {
+			continue
+		}
+
+		bx, by := boss.Position()
+		testGame.Player.SetPosition(bx-1, by)
+		boss.HP = 1
+
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		px, py := testGame.Player.Position()
+		for i, mat := range testGame.Materials {
+			mx, my := mat.Position()
+			if mx == px && my == py {
+				t.Errorf("Seed %d: Material %d spawned on player position (%d,%d)", seed, i, mx, my)
+			}
+		}
+	}
+}
+
+// TestGameMonsterDropsDontOverlapMonsters verifies materials don't spawn on living monsters
+func TestGameMonsterDropsDontOverlapMonsters(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		boss := testGame.GetBoss()
+		if boss == nil {
+			continue
+		}
+
+		bx, by := boss.Position()
+		testGame.Player.SetPosition(bx-1, by)
+		boss.HP = 1
+
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		for i, mat := range testGame.Materials {
+			mx, my := mat.Position()
+			if monster := testGame.GetMonsterAt(mx, my); monster != nil {
+				t.Errorf("Seed %d: Material %d at (%d,%d) overlaps with monster", seed, i, mx, my)
+			}
+		}
+	}
+}
+
+// TestGameMonsterDropsDontOverlapItems verifies materials don't spawn on existing items
+func TestGameMonsterDropsDontOverlapItems(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		testGame := NewGame(50, 30, seed)
+
+		boss := testGame.GetBoss()
+		if boss == nil {
+			continue
+		}
+
+		bx, by := boss.Position()
+		testGame.Player.SetPosition(bx-1, by)
+		boss.HP = 1
+
+		testGame.HandleInput(ui.ActionMove, ui.DirRight)
+
+		for i, mat := range testGame.Materials {
+			mx, my := mat.Position()
+			if item := testGame.GetItemAt(mx, my); item != nil {
+				t.Errorf("Seed %d: Material %d at (%d,%d) overlaps with item", seed, i, mx, my)
+			}
+		}
+	}
+}

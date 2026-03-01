@@ -521,12 +521,115 @@ func (g *Game) spawnMonsterDrops(monster *entity.Monster) {
 	}
 
 	drops := monster.DropTable.GenerateDrops()
+	if len(drops) == 0 {
+		return
+	}
+
 	mx, my := monster.Position()
 
-	for _, materialType := range drops {
-		material := entity.NewMaterial(materialType, mx, my)
+	// Find valid positions around the monster for drops
+	// Start with the monster's position, then spiral outward
+	validPositions := g.findDropPositions(mx, my, len(drops))
+
+	for i, materialType := range drops {
+		var posX, posY int
+		if i < len(validPositions) {
+			posX, posY = validPositions[i].x, validPositions[i].y
+		} else {
+			// Fallback: if we couldn't find enough positions, stack on monster position
+			// This should be rare in practice
+			posX, posY = mx, my
+		}
+
+		material := entity.NewMaterial(materialType, posX, posY)
 		g.Materials = append(g.Materials, material)
 	}
+}
+
+// position is a simple coordinate pair for drop placement
+type position struct {
+	x, y int
+}
+
+// findDropPositions finds valid positions for material drops, starting from center
+// and spiraling outward. Returns up to count positions.
+func (g *Game) findDropPositions(centerX, centerY, count int) []position {
+	positions := make([]position, 0, count)
+
+	// Check center first (where monster died)
+	if g.isValidDropPosition(centerX, centerY) {
+		positions = append(positions, position{centerX, centerY})
+		if len(positions) >= count {
+			return positions
+		}
+	}
+
+	// Spiral outward checking adjacent tiles
+	// Order: immediate neighbors first, then expand radius
+	maxRadius := 5 // Don't spread too far
+
+	for radius := 1; radius <= maxRadius && len(positions) < count; radius++ {
+		// Check all tiles at this radius (square ring around center)
+		for dx := -radius; dx <= radius; dx++ {
+			for dy := -radius; dy <= radius; dy++ {
+				// Only check tiles on the edge of this radius
+				if abs(dx) != radius && abs(dy) != radius {
+					continue
+				}
+
+				checkX, checkY := centerX+dx, centerY+dy
+				if g.isValidDropPosition(checkX, checkY) {
+					// Also check this position isn't already in our list
+					alreadyUsed := false
+					for _, p := range positions {
+						if p.x == checkX && p.y == checkY {
+							alreadyUsed = true
+							break
+						}
+					}
+					if !alreadyUsed {
+						positions = append(positions, position{checkX, checkY})
+						if len(positions) >= count {
+							return positions
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return positions
+}
+
+// isValidDropPosition checks if a position is suitable for dropping a material
+func (g *Game) isValidDropPosition(x, y int) bool {
+	// Must be walkable
+	if !g.Dungeon.IsWalkable(x, y) {
+		return false
+	}
+
+	// Can't be on player
+	px, py := g.Player.Position()
+	if x == px && y == py {
+		return false
+	}
+
+	// Can't be on a living monster
+	if g.GetMonsterAt(x, y) != nil {
+		return false
+	}
+
+	// Can't be on an existing item
+	if g.GetItemAt(x, y) != nil {
+		return false
+	}
+
+	// Can't be on an existing material
+	if g.GetMaterialAt(x, y) != nil {
+		return false
+	}
+
+	return true
 }
 
 func (g *Game) monsterAttack(monster *entity.Monster) {
